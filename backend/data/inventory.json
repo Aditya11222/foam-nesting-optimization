@@ -1,0 +1,100 @@
+{
+  "buns": [
+    {
+      "id": "bun-hr40-01",
+      "code": "BUN-HR40-101",
+      "grade": "HR-40",
+      "nominal_length": 108.0,
+      "nominal_width": 82.0,
+      "nominal_height": 40.0,
+      "skin_trim": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "cost": 420.0
+    },
+    {
+      "id": "bun-hr40-02",
+      "code": "BUN-HR40-102",
+      "grade": "HR-40",
+      "nominal_length": 108.0,
+      "nominal_width": 82.0,
+      "nominal_height": 40.0,
+      "skin_trim": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "cost": 420.0
+    },
+    {
+      "id": "bun-hr40-03",
+      "code": "BUN-HR40-103",
+      "grade": "HR-40",
+      "nominal_length": 108.0,
+      "nominal_width": 82.0,
+      "nominal_height": 40.0,
+      "skin_trim": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "cost": 420.0
+    },
+    {
+      "id": "bun-hr30-01",
+      "code": "BUN-HR30-201",
+      "grade": "HR-30",
+      "nominal_length": 108.0,
+      "nominal_width": 80.0,
+      "nominal_height": 38.0,
+      "skin_trim": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "cost": 380.0
+    },
+    {
+      "id": "bun-ve50-01",
+      "code": "BUN-VE50-301",
+      "grade": "VE-50",
+      "nominal_length": 100.0,
+      "nominal_width": 80.0,
+      "nominal_height": 36.0,
+      "skin_trim": { "x": 1.0, "y": 1.0, "z": 1.0 },
+      "cost": 550.0
+    }
+  ],
+  "remnants": [
+    {
+      "id": "rem-hr40-01",
+      "code": "REM-HR40-01",
+      "grade": "HR-40",
+      "length": 48.0,
+      "width": 40.0,
+      "height": 24.0,
+      "cut_date": "2026-10-22",
+      "storage_location": "Bay R-04",
+      "usability_score": 0.88
+    },
+    {
+      "id": "rem-hr40-02",
+      "code": "REM-HR40-02",
+      "grade": "HR-40",
+      "length": 60.0,
+      "width": 32.0,
+      "height": 20.0,
+      "cut_date": "2026-10-18",
+      "storage_location": "Bay R-12",
+      "usability_score": 0.65
+    },
+    {
+      "id": "rem-hr30-01",
+      "code": "REM-HR30-01",
+      "grade": "HR-30",
+      "length": 40.0,
+      "width": 30.0,
+      "height": 18.0,
+      "cut_date": "2026-10-21",
+      "storage_location": "Bay R-02",
+      "usability_score": 0.82
+    },
+    {
+      "id": "rem-ve50-01",
+      "code": "REM-VE50-01",
+      "grade": "VE-50",
+      "length": 50.0,
+      "width": 40.0,
+      "height": 16.0,
+      "cut_date": "2026-10-17",
+      "storage_location": "Bay R-08",
+      "usability_score": 0.58
+    }
+  ]
+}

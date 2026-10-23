@@ -1,0 +1,38 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Node & Dependencies
+node_modules/
+frontend/node_modules/
+
+# Production Builds
+dist/
+frontend/dist/
+build/
+
+# Python Cache & Testing
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Vercel Project Metadata
+.vercel/
+
+# Logs & OS Files
+*.log
+.DS_Store
+Thumbs.db
+
+# Client Confidential PDF Proposals
+*.pdf

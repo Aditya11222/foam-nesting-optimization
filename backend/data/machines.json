@@ -1,0 +1,29 @@
+[
+  {
+    "id": "saw-g1",
+    "name": "Saw Station 1 — Horizontal Guillotine",
+    "cut_type": "guillotine",
+    "max_cut_height": 48.0,
+    "kerf": 0.125,
+    "automation": "CNC",
+    "preferred_direction": "X"
+  },
+  {
+    "id": "saw-g2",
+    "name": "Saw Station 2 — Vertical Slicer",
+    "cut_type": "guillotine",
+    "max_cut_height": 52.0,
+    "kerf": 0.125,
+    "automation": "rotating",
+    "preferred_direction": "Z"
+  },
+  {
+    "id": "saw-wj",
+    "name": "Saw Station 3 — Waterjet Profiler (CNC Contour)",
+    "cut_type": "free",
+    "max_cut_height": 36.0,
+    "kerf": 0.0625,
+    "automation": "CNC",
+    "preferred_direction": "X"
+  }
+]
