@@ -36,3 +36,6 @@ Thumbs.db
 
 # Client Confidential PDF Proposals
 *.pdf
+
+.vercel
+.env*
