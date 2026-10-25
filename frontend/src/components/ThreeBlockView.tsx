@@ -234,7 +234,7 @@ export const ThreeBlockView: React.FC<ThreeBlockViewProps> = ({
           ],
           fov: 40,
         }}
-        gl={{ antialias: true }}
+        gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
         <color attach="background" args={['#F8FAFC']} />
         <ambientLight intensity={0.9} />
