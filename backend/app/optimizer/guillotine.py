@@ -9,6 +9,7 @@ from typing import List, Tuple, Optional, Dict
 from datetime import datetime
 import uuid
 
+from ..domain.unplaced_helper import build_unplaced_summary
 from ..domain.models import (
     OptimizationRequest,
     OptimizationResult,
@@ -305,6 +306,15 @@ def optimize_guillotine_job(
     all_cuts = [c for b in blocks_output for c in b.cuts]
     saw_time = estimate_saw_time_minutes(all_cuts)
 
+    all_placed_items = [p for b in blocks_output for p in b.placed_parts]
+    unplaced_summary_list = build_unplaced_summary(
+        demanded_parts=instances_to_place,
+        placed_parts=all_placed_items,
+        candidate_stocks=candidate_stocks,
+        machine=machine,
+        target_grade=target_grade
+    )
+
     return OptimizationResult(
         job_id=request.job_id,
         grade=target_grade,
@@ -312,8 +322,9 @@ def optimize_guillotine_job(
         timestamp=datetime.now(),
         machine=machine,
         total_parts_demanded=len(instances_to_place),
-        total_parts_placed=len(instances_to_place) - len(unplaced_items),
-        unplaced_parts=unplaced_items,
+        total_parts_placed=len(all_placed_items),
+        unplaced_parts=unplaced_summary_list,
+        unplaced_summary=unplaced_summary_list,
         blocks_used_count=len(blocks_output),
         blocks=blocks_output,
         total_gross_volume=round(total_gross, 2),

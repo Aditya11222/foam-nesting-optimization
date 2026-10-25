@@ -17,6 +17,9 @@ export interface MachineProfile {
   kerf: number;
   automation: 'manual' | 'rotating' | 'CNC';
   preferred_direction: string;
+  hourly_rate?: number;
+  feed_rate_ipm?: number;
+  available_hours_limit?: number;
 }
 
 export interface AlgorithmInfo {
@@ -24,7 +27,10 @@ export interface AlgorithmInfo {
   name: string;
   description: string;
   speed_tag: string;
+  tag?: string;
   supported_cut_types: string[];
+  available?: boolean;
+  unavailable_reason?: string;
 }
 
 export interface BlockInput {
@@ -120,6 +126,8 @@ export interface BlockLayout {
   gross_utilization_pct: number;
   net_utilization_pct: number;
   material_recovery_pct: number;
+  assigned_machine_id?: string;
+  assigned_machine_name?: string;
 }
 
 export interface ValidationResult {
@@ -138,6 +146,15 @@ export interface ValidationResult {
   };
 }
 
+export interface UnplacedPartSummary extends PartItem {
+  requested_qty: number;
+  placed_qty: number;
+  unplaced_qty: number;
+  reason_code: string;
+  message: string;
+  suggested_action: string;
+}
+
 export interface OptimizationResult {
   job_id: string;
   grade: string;
@@ -148,7 +165,8 @@ export interface OptimizationResult {
   machine: MachineProfile;
   total_parts_demanded: number;
   total_parts_placed: number;
-  unplaced_parts: PartItem[];
+  unplaced_parts: UnplacedPartSummary[];
+  unplaced_summary?: UnplacedPartSummary[];
   blocks_used_count: number;
   blocks: BlockLayout[];
   total_gross_volume: number;
@@ -164,6 +182,11 @@ export interface OptimizationResult {
   runtime_ms: number;
   validation: ValidationResult;
   is_best?: boolean;
+  solver_status?: string;
+  solver_time_ms?: number;
+  verify_iterations?: number;
+  fallback_used?: boolean;
+  machine_assignment_reason?: string;
 }
 
 export interface OptimizationRequest {
@@ -180,6 +203,8 @@ export interface OptimizationRequest {
   seed?: number;
   available_blocks?: BlockInput[];
   kerf?: number;
+  machine_objective?: 'lowest_cost' | 'best_yield' | 'lowest_time';
+  allow_overproduction?: boolean;
 }
 
 export interface RemnantAgingStatus {

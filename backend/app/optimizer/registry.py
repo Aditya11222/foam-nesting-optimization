@@ -13,6 +13,8 @@ from .strategies import (
     SimulatedAnnealingStrategy,
 )
 from .free_nesting import FreeNestingStrategy
+from ..engine.ortools.block_assignment import OrtBlockAssignmentStrategy
+from ..engine.ortools.pattern_selection import OrtPatternSelectionStrategy
 
 
 class StrategyNotImplementedError(NotImplementedError):
@@ -45,6 +47,8 @@ class AlgorithmRegistry:
         self.register(FirstFitDecreasingStrategy())
         self.register(SimulatedAnnealingStrategy())
         self.register(FreeNestingStrategy())
+        self.register(OrtBlockAssignmentStrategy())
+        self.register(OrtPatternSelectionStrategy())
 
     def register(self, strategy: NestingStrategy):
         self._algorithms[strategy.info.id] = strategy

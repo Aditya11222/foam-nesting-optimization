@@ -35,6 +35,9 @@ class MachineProfile(BaseModel):
     kerf: float = Field(default=0.125, description="Saw blade kerf in inches, default 1/8 in")
     automation: MachineAutomation = MachineAutomation.MANUAL
     preferred_direction: str = "X"
+    hourly_rate: float = Field(default=65.0, description="Operating rate in $/hr")
+    feed_rate_ipm: float = Field(default=100.0, description="Cutting speed in inches per min")
+    available_hours_limit: Optional[float] = Field(default=None, description="Available machine capacity in hours")
 
     @field_validator("max_cut_height", "kerf")
     @classmethod
@@ -228,6 +231,8 @@ class BlockLayout(BaseModel):
     gross_utilization_pct: float      # parts_volume / gross_volume * 100
     net_utilization_pct: float        # parts_volume / usable_volume * 100
     material_recovery_pct: float      # (parts_volume + remnants_volume) / gross_volume * 100
+    assigned_machine_id: Optional[str] = None
+    assigned_machine_name: Optional[str] = None
 
 
 class BlockInput(BaseModel):
@@ -250,7 +255,10 @@ class AlgorithmInfo(BaseModel):
     name: str
     description: str
     speed_tag: str
+    tag: Optional[str] = None
     supported_cut_types: List[str] = ["guillotine"]
+    available: bool = True
+    unavailable_reason: Optional[str] = None
 
 
 class ValidationResult(BaseModel):
@@ -274,6 +282,18 @@ class OptimizationRequest(BaseModel):
     seed: int = 42
     available_blocks: Optional[List[BlockInput]] = None
     kerf: Optional[float] = None
+    machine_objective: Optional[str] = "lowest_cost"
+    allow_overproduction: Optional[bool] = False
+
+
+
+class UnplacedPartSummary(PartItem):
+    requested_qty: int = 1
+    placed_qty: int = 0
+    unplaced_qty: int = 1
+    reason_code: str = "INSUFFICIENT_BLOCK_QUANTITY"
+    message: str = "Could not place part due to insufficient stock capacity."
+    suggested_action: str = "Add more stock blocks or adjust part dimensions."
 
 
 class OptimizationResult(BaseModel):
@@ -286,7 +306,8 @@ class OptimizationResult(BaseModel):
     machine: MachineProfile
     total_parts_demanded: int
     total_parts_placed: int
-    unplaced_parts: List[PartItem] = []
+    unplaced_parts: List[UnplacedPartSummary] = []
+    unplaced_summary: List[UnplacedPartSummary] = []
     blocks_used_count: int
     blocks: List[BlockLayout]
     total_gross_volume: float
@@ -302,3 +323,8 @@ class OptimizationResult(BaseModel):
     runtime_ms: float = 0.0
     validation: ValidationResult = Field(default_factory=ValidationResult)
     is_best: bool = False
+    solver_status: Optional[str] = None
+    solver_time_ms: Optional[float] = None
+    verify_iterations: Optional[int] = None
+    fallback_used: Optional[bool] = None
+    machine_assignment_reason: Optional[str] = None

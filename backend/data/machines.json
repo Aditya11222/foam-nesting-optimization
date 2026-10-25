@@ -1,29 +1,35 @@
 [
   {
     "id": "saw-g1",
-    "name": "Saw Station 1 — Horizontal Guillotine",
+    "name": "Saw Station 1 \u2014 Horizontal Guillotine",
     "cut_type": "guillotine",
     "max_cut_height": 48.0,
     "kerf": 0.125,
     "automation": "CNC",
-    "preferred_direction": "X"
+    "preferred_direction": "X",
+    "hourly_rate": 60.0,
+    "feed_rate_ipm": 120.0
   },
   {
     "id": "saw-g2",
-    "name": "Saw Station 2 — Vertical Slicer",
+    "name": "Saw Station 2 \u2014 Vertical Slicer",
     "cut_type": "guillotine",
     "max_cut_height": 52.0,
     "kerf": 0.125,
     "automation": "rotating",
-    "preferred_direction": "Z"
+    "preferred_direction": "Z",
+    "hourly_rate": 50.0,
+    "feed_rate_ipm": 90.0
   },
   {
     "id": "saw-wj",
-    "name": "Saw Station 3 — Waterjet Profiler (CNC Contour)",
+    "name": "Saw Station 3 \u2014 Waterjet Profiler (CNC Contour)",
     "cut_type": "free",
     "max_cut_height": 36.0,
     "kerf": 0.0625,
     "automation": "CNC",
-    "preferred_direction": "X"
+    "preferred_direction": "X",
+    "hourly_rate": 95.0,
+    "feed_rate_ipm": 45.0
   }
 ]

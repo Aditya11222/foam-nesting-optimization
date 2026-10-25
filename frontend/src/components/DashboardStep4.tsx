@@ -302,11 +302,41 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
                 Executive & Shop Floor
               </span>
             </h2>
-            <p className="text-xs text-slate-500">
-              Job <span className="font-semibold text-slate-700">{currentResult.job_id}</span> • Grade{' '}
-              <span className="font-semibold text-slate-700">{currentResult.grade}</span> • Machine{' '}
-              <span className="font-semibold text-slate-700">{currentResult.machine.name}</span>
+            <p className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span>Job <span className="font-semibold text-slate-700">{currentResult.job_id}</span></span>
+              <span>•</span>
+              <span>Grade <span className="font-semibold text-slate-700">{currentResult.grade}</span></span>
+              <span>•</span>
+              <span>Station <span className="font-semibold text-slate-700">{currentResult.machine.name}</span></span>
+              <span>•</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+                currentResult.total_parts_placed < currentResult.total_parts_demanded
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              }`}>
+                {currentResult.total_parts_placed} of {currentResult.total_parts_demanded} parts placed
+                {currentResult.total_parts_placed < currentResult.total_parts_demanded && (
+                  <span className="ml-1 text-red-600 font-extrabold">
+                    ({currentResult.total_parts_demanded - currentResult.total_parts_placed} unplaced)
+                  </span>
+                )}
+              </span>
+              {currentResult.solver_status && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded font-mono text-[10px] bg-blue-50 text-blue-700 border border-blue-200" title={currentResult.solver_status}>
+                    {currentResult.solver_status.startsWith('OPTIMAL') ? 'Optimal (Model)' : currentResult.solver_status}
+                    {currentResult.solver_time_ms ? ` (${currentResult.solver_time_ms} ms)` : ''}
+                  </span>
+                </>
+              )}
             </p>
+            {currentResult.machine_assignment_reason && (
+              <div className="mt-2 text-[11px] text-blue-800 bg-blue-50/80 border border-blue-200 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-2xs">
+                <span className="font-semibold text-blue-900 shrink-0">Auto-Assigned Station:</span>
+                <span>{currentResult.machine_assignment_reason}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -502,7 +532,12 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
               ${optCostPerPart.toFixed(2)}
             </div>
             <div className="text-xs text-violet-600 font-medium">
-              Average across {currentResult.total_parts_placed} placed pieces
+              Average across {currentResult.total_parts_placed} of {currentResult.total_parts_demanded} pieces placed
+              {currentResult.total_parts_placed < currentResult.total_parts_demanded && (
+                <div className="text-[11px] text-red-600 font-bold">
+                  {currentResult.total_parts_demanded - currentResult.total_parts_placed} pieces unplaced
+                </div>
+              )}
             </div>
           </div>
           <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-1.5">

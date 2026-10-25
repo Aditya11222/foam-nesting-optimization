@@ -1,3 +1,4 @@
+from ..engine.ortools.machine_assignment import select_optimal_machine
 """
 Routes for 3D Nesting Optimization, Algorithm Registry, and Comparative Benchmarking.
 """
@@ -52,24 +53,39 @@ def run_optimization(
     Enforces machine compatibility, grade segregation, 1/16" precision, kerf, skin trim, and rise constraints.
     Validates output and measures runtime.
     """
-    # 1. Select machine
-    machine_id = request.machine_id or "saw-g2"
-    machine = inv_repo.get_machine(machine_id)
-    if not machine:
-        all_machines = inv_repo.list_machines()
-        if not all_machines:
-            raise HTTPException(status_code=500, detail="No cutting machines configured.")
-        machine = all_machines[0]
+    # 1. Resolve strategy first to check supported cut types
+    try:
+        strategy = algorithm_registry.get(request.algorithm_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # 2. Stock retrieval
     buns = inv_repo.list_buns(grade=request.grade.upper())
     remnants = inv_repo.list_remnants(grade=request.grade.upper())
 
-    # 3. Resolve strategy
-    try:
-        strategy = algorithm_registry.get(request.algorithm_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # 3. Select machine (manual or Auto OR-Tools)
+    machine_id = request.machine_id or "saw-g2"
+    machine_reason = None
+    all_machines = inv_repo.list_machines()
+
+    if machine_id == "auto":
+        req_cut_type = strategy.info.supported_cut_types[0] if len(strategy.info.supported_cut_types) == 1 else None
+        decision = select_optimal_machine(
+            request=request,
+            candidate_machines=all_machines,
+            available_buns=buns,
+            available_remnants=remnants,
+            objective=request.machine_objective or "lowest_cost",
+            required_cut_type=req_cut_type
+        )
+        machine = decision.chosen_machine
+        machine_reason = decision.reason
+    else:
+        machine = inv_repo.get_machine(machine_id)
+        if not machine:
+            if not all_machines:
+                raise HTTPException(status_code=500, detail="No cutting machines configured.")
+            machine = all_machines[0]
 
     # 4. Check machine compatibility
     if machine.cut_type.value not in strategy.info.supported_cut_types:
@@ -101,6 +117,12 @@ def run_optimization(
     elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 1)
     result.runtime_ms = elapsed_ms
 
+    if machine_reason:
+        result.machine_assignment_reason = machine_reason
+    for b in result.blocks:
+        b.assigned_machine_id = machine.id
+        b.assigned_machine_name = machine.name
+
     # 6. Strict validation
     validation = validate_optimization_result(result)
     result.validation = validation
@@ -121,15 +143,27 @@ def compare_all_algorithms(
     Marks the best heuristic with is_best=True.
     """
     machine_id = request.machine_id or "saw-g2"
-    machine = inv_repo.get_machine(machine_id)
-    if not machine:
-        all_machines = inv_repo.list_machines()
-        if not all_machines:
-            raise HTTPException(status_code=500, detail="No cutting machines configured.")
-        machine = all_machines[0]
-
+    all_machines = inv_repo.list_machines()
     buns = inv_repo.list_buns(grade=request.grade.upper())
     remnants = inv_repo.list_remnants(grade=request.grade.upper())
+    machine_reason = None
+
+    if machine_id == "auto":
+        decision = select_optimal_machine(
+            request=request,
+            candidate_machines=all_machines,
+            available_buns=buns,
+            available_remnants=remnants,
+            objective=request.machine_objective or "lowest_cost"
+        )
+        machine = decision.chosen_machine
+        machine_reason = decision.reason
+    else:
+        machine = inv_repo.get_machine(machine_id)
+        if not machine:
+            if not all_machines:
+                raise HTTPException(status_code=500, detail="No cutting machines configured.")
+            machine = all_machines[0]
 
     # Filter strategies compatible with selected machine
     strategies = [
@@ -161,6 +195,11 @@ def compare_all_algorithms(
                 machine=machine
             )
             res.runtime_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+            if machine_reason:
+                res.machine_assignment_reason = machine_reason
+            for b in res.blocks:
+                b.assigned_machine_id = machine.id
+                b.assigned_machine_name = machine.name
             res.validation = validate_optimization_result(res)
             results.append(res)
         except Exception as e:

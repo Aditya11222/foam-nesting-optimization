@@ -83,13 +83,16 @@ The optimization engine features 4 pluggable algorithms registered in `backend/a
 ===================================================================================================================
 BENCHMARK COMPARISON TABLE -- PROPOSAL JOB #4821 (154 TOTAL DEMANDED PARTS)
 ===================================================================================================================
-Algorithm                    | Net Util % | Gross Util % | Scrap (cu in)  | Blocks | Cuts  | Runtime    | Status  | Badge
+Algorithm                              | Net Util % | Blocks | Scrap (cu ft) | Cuts  | Runtime (ms) | Status / Notes
 -------------------------------------------------------------------------------------------------------------------
-Best-Fit Decreasing (BFD)    | 40.3%      | 37.0%        | 63,491.9       | 5      | 219   | 11.4 ms    | VALID   | 
-First-Fit Decreasing (FFD)   | 58.2%      | 53.5%        | 133,096.5      | 4      | 274   | 15.3 ms    | VALID   | [BEST IN COMPARISON]
-Simulated Annealing (SA)     | 40.3%      | 37.0%        | 63,491.9       | 5      | 219   | 2009.3 ms  | VALID   | 
+Best-Fit Decreasing (BFD)              | 43.9%      | 3      | 24.2 cu ft    | 207   | 11.0 ms      | VALID
+First-Fit Decreasing (FFD)             | 65.8%      | 2      | 59.4 cu ft    | 261   | 15.3 ms      | VALID [BEST IN COMPARISON]
+Simulated Annealing (SA)               | 43.9%      | 3      | 24.2 cu ft    | 207   | 609.4 ms     | VALID
+OR-Tools Block Assignment + Slicing    | 56.2%      | 1*     | 21.1 cu ft    | 132   | 4058.5 ms    | VALID (CP-SAT optimal allocation)
+OR-Tools Pattern Selection (Fixed Pool)| 21.9%      | 6      | 53.7 cu ft    | 259   | 796.5 ms     | VALID (exact demand covered)
 ===================================================================================================================
-Disclaimer: Results are heuristic solutions. 'Best' indicates highest performance among evaluated heuristics, not proven mathematical optimality.
+*Detailed analysis and multi-job benchmarks available in docs/BENCHMARK_ORTOOLS.md.
+Disclaimer: CP-SAT proves mathematical optimality only for the volume/pattern allocation model. Physical layouts remain heuristic solutions.
 ```
 
 ---
@@ -177,14 +180,21 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
 | **Multi-Section CSV Export** | **Fully Implemented** | Single multi-section CSV with UTF-8 BOM exporting all job summary, parts, cuts, remnants, comparisons, and baseline deltas. |
 | **Volume Reconciliation & Validation** | **Fully Implemented** | Pairwise collision-free verification and strict volume identity conservation tested on all algorithms. |
 | **Bilingual Toggle (EN / ES)** | **Fully Implemented** | English strings and complete Spanish catalogues with `[revisión]` placeholders switchable in header. |
+| **OR-Tools Block Assignment (ORT-ASSIGN)** | **Fully Implemented** | CP-SAT multi-block bin assignment, remnant prioritization, iterative verify loop with cardinality cuts. |
+| **OR-Tools Pattern Selection (ORT-PATTERN)** | **Fully Implemented** | Fixed-pool column generation, exact demand satisfaction, optional overproduction flag, de-duplicated and capped. |
+| **Auto (OR-Tools) Machine Selection** | **Fully Implemented** | Station selection dropdown with configurable objective (`lowest_cost`, `best_yield`, `lowest_time`), throat height check, capacity limits. |
+| **Comprehensive OR-Tools Benchmark Suite** | **Fully Implemented** | Evaluates Job #4821, 20 synthetic jobs, multi-grade jobs, and volume-vs-geometry challenge in `docs/BENCHMARK_ORTOOLS.md`. |
+| **Rush-Order Re-planning with Warm Start** | **Stubbed (Planned)** | Interface stubs provided in `backend/app/engine/ortools/stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
+| **Dynamic Column Generation (Gilmore-Gomory)**| **Stubbed (Planned)** | Interface stubs provided in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
+| **Multi-Job Machine Scheduling** | **Stubbed (Planned)** | Disjunctive scheduling stubs in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
 | **SyteLine ERP Integration** | **Stubbed** | Interface stubs provided in `backend/app/api/stubs.py`. |
-| **ML Remnant Usability Scoring** | **Stubbed** | Interface stubs provided in `stubs.py` (rule-based volume scoring active for demo). |
+| **ML Remnant Usability Scoring** | **Stubbed** | Rule-based volume scoring active for demo; ML stubs in `stubs.py`. |
 
 ---
 
 ## 7. Testing & Verification
 
-Run the full pytest suite (34 passing test cases):
+Run the full pytest suite (51 passing test cases):
 ```bash
 pytest backend/tests
 ```

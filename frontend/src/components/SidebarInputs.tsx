@@ -17,6 +17,8 @@ interface SidebarInputsProps {
   machines: MachineProfile[];
   selectedMachineId: string;
   onSelectMachine: (machineId: string) => void;
+  machineObjective?: 'lowest_cost' | 'best_yield' | 'lowest_time';
+  onSelectMachineObjective?: (obj: 'lowest_cost' | 'best_yield' | 'lowest_time') => void;
   skinTrim: number;
   onChangeSkinTrim: (trim: number) => void;
   kerf: number;
@@ -42,6 +44,8 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
   machines,
   selectedMachineId,
   onSelectMachine,
+  machineObjective = 'lowest_cost',
+  onSelectMachineObjective,
   skinTrim,
   onChangeSkinTrim,
   kerf,
@@ -162,8 +166,9 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
               }
               onInputModified();
             }}
-            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
+            <option value="auto">⚡ {t('auto_machine')}</option>
             {machines.map((m) => {
               const badge =
                 m.id === 'saw-g1'
@@ -179,8 +184,31 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
             })}
           </select>
 
+          {/* Machine Objective Selector for Auto */}
+          {selectedMachineId === 'auto' && (
+            <div className="mt-2.5 p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg space-y-1.5 text-xs">
+              <label className="block font-semibold text-blue-900">{t('machine_objective')}</label>
+              <select
+                value={machineObjective}
+                onChange={(e) => {
+                  onSelectMachineObjective?.(e.target.value as any);
+                  onInputModified();
+                }}
+                className="w-full px-2.5 py-1.5 rounded border border-blue-300 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="lowest_cost">{t('obj_lowest_cost')}</option>
+                <option value="best_yield">{t('obj_best_yield')}</option>
+                <option value="lowest_time">{t('obj_lowest_time')}</option>
+              </select>
+              <p className="text-[10px] text-blue-700">
+                OR-Tools analyzes throat clearance, feed speeds, and station rates to auto-assign the best saw.
+              </p>
+            </div>
+          )}
+
           {/* Machine Clearance Warning Check */}
           {(() => {
+            if (selectedMachineId === 'auto') return null;
             const currentMach = machines.find((m) => m.id === selectedMachineId);
             if (!currentMach) return null;
             const exceededBlock = blocks.find((b) => (b.nominal_height - 2 * skinTrim) > currentMach.max_cut_height);

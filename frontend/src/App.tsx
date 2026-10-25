@@ -109,6 +109,7 @@ export default function App() {
   const [allowMixedGrades, setAllowMixedGrades] = useState(false);
   const [machines, setMachines] = useState<MachineProfile[]>([]);
   const [selectedMachineId, setSelectedMachineId] = useState('saw-g2');
+  const [machineObjective, setMachineObjective] = useState<'lowest_cost' | 'best_yield' | 'lowest_time'>('lowest_cost');
   const [skinTrim, setSkinTrim] = useState(1.0);
   const [kerf, setKerf] = useState(0.125);
   const [blocks, setBlocks] = useState<BlockInput[]>(DEFAULT_BLOCKS);
@@ -210,6 +211,7 @@ export default function App() {
     customer: 'Acme Bedding SO-10592',
     grade: selectedGrade,
     machine_id: selectedMachineId,
+    machine_objective: machineObjective,
     skin_trim_per_face: skinTrim,
     kerf: kerf,
     parts: parts,
@@ -386,6 +388,8 @@ export default function App() {
           machines={machines}
           selectedMachineId={selectedMachineId}
           onSelectMachine={handleSelectMachine}
+          machineObjective={machineObjective}
+          onSelectMachineObjective={setMachineObjective}
           skinTrim={skinTrim}
           onChangeSkinTrim={setSkinTrim}
           kerf={kerf}

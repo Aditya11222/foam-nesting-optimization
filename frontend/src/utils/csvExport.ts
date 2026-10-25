@@ -73,6 +73,8 @@ export function exportJobCSV(
     `Net Utilization,${currentResult.net_utilization_pct.toFixed(1)},%,Parts Volume / Usable Volume`,
     `Gross Utilization,${currentResult.gross_utilization_pct.toFixed(1)},%,Parts Volume / Gross Bun Volume`,
     `Total Cuts Count,${currentResult.total_cuts_count},cuts,Total saw cut stages`,
+    `Assigned Saw Station,${esc(currentResult.machine?.name || 'N/A')},${esc(currentResult.machine?.id || '')},${esc(currentResult.machine_assignment_reason || 'Manual selection')}`,
+    `Solver Status,${esc(currentResult.solver_status || 'Heuristic')},${currentResult.solver_time_ms ? `${currentResult.solver_time_ms} ms` : 'N/A'},${currentResult.fallback_used ? 'Fallback used' : 'Native execution'}`,
     `Estimated Saw Time,${currentResult.estimated_saw_time_minutes.toFixed(1)},min,At machine feed rate`,
     `Estimated Material Cost,$${matCost.toFixed(2)},USD,Based on $${unitCost.toFixed(2)}/cu ft`,
     `Estimated Saw Operating Cost,$${sawCost.toFixed(2)},USD,Based on $${sawRate.toFixed(2)}/hr saw rate`,
@@ -80,6 +82,33 @@ export function exportJobCSV(
     `Net Job Production Cost,$${netJobCost.toFixed(2)},USD,Material + Saw - Remnant Credit`,
     `Average Finished Part Cost,$${(currentResult.total_parts_placed > 0 ? netJobCost / currentResult.total_parts_placed : 0).toFixed(2)},USD/part,Average cost per piece placed`
   ].join('\n'));
+
+  // Unplaced & Infeasible Parts Summary
+  if (currentResult.unplaced_parts && currentResult.unplaced_parts.length > 0) {
+    const unplacedRows: string[] = [
+      '# =========================================================',
+      '# UNPLACED & INFEASIBLE PARTS DIAGNOSTIC SUMMARY',
+      '# =========================================================',
+      'SKU,Name,Grade,Length_in,Width_in,Height_in,Requested_Qty,Placed_Qty,Unplaced_Qty,Reason_Code,Diagnosis_Message,Suggested_Action'
+    ];
+    currentResult.unplaced_parts.forEach((u) => {
+      unplacedRows.push([
+        esc(u.sku),
+        esc(u.name),
+        esc(u.grade),
+        u.length,
+        u.width,
+        u.height,
+        u.requested_qty ?? u.quantity,
+        u.placed_qty ?? 0,
+        u.unplaced_qty ?? u.quantity,
+        esc(u.reason_code ?? 'INSUFFICIENT_BLOCK_QUANTITY'),
+        esc(u.message ?? ''),
+        esc(u.suggested_action ?? '')
+      ].join(','));
+    });
+    sections.push(unplacedRows.join('\n'));
+  }
 
   // Section 2: Placed Parts Table
   const partRows: string[] = [
@@ -168,7 +197,7 @@ export function exportJobCSV(
       '# =========================================================',
       '# SECTION 5: ALGORITHM BENCHMARK COMPARATIVE EVALUATION',
       '# =========================================================',
-      'Algorithm_ID,Algorithm_Name,Best_In_Comparison,Blocks_Used,Net_Yield_pct,Gross_Yield_pct,Scrap_Volume_cu_in,Total_Cuts,Runtime_ms'
+      'Algorithm_ID,Algorithm_Name,Best_In_Comparison,Blocks_Used,Net_Yield_pct,Gross_Yield_pct,Scrap_Volume_cu_in,Total_Cuts,Runtime_ms,Solver_Status,Solver_Time_ms,Fallback_Used'
     ];
     comparisonResults.forEach((cr) => {
       compRows.push([
@@ -180,7 +209,10 @@ export function exportJobCSV(
         cr.gross_utilization_pct.toFixed(1),
         cr.total_unrecoverable_scrap_volume.toFixed(1),
         cr.total_cuts_count,
-        cr.runtime_ms ?? 0
+        cr.runtime_ms ?? 0,
+        esc(cr.solver_status || 'Heuristic'),
+        cr.solver_time_ms ?? '',
+        cr.fallback_used ? 'YES' : 'NO'
       ].join(','));
     });
     sections.push(compRows.join('\n'));

@@ -11,7 +11,9 @@ import {
   Archive,
   Star,
   Info,
-  Loader2
+  Loader2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import type { AlgorithmInfo, OptimizationResult } from '../types';
 
@@ -47,6 +49,8 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
   selectedMachine,
 }) => {
   const { t } = useTranslation();
+  const [isUnplacedExpanded, setIsUnplacedExpanded] = React.useState(true);
+  const [showAllUnplaced, setShowAllUnplaced] = React.useState(false);
 
   // Filter algorithms compatible with selected machine cut_type
   const compatibleAlgorithms = selectedMachine
@@ -54,6 +58,7 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
     : algorithms;
 
   const activeAlgorithms = compatibleAlgorithms.length > 0 ? compatibleAlgorithms : algorithms;
+  const hasSolverStatus = comparisonResults ? comparisonResults.some((r) => r.solver_status || r.fallback_used) : false;
   const selectedAlgo = activeAlgorithms.find((a) => a.id === selectedAlgorithmId) || activeAlgorithms[0];
 
   return (
@@ -96,11 +101,15 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
               disabled={isOptimizing}
               className="w-full pl-3 pr-8 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              {activeAlgorithms.map((algo) => (
-                <option key={algo.id} value={algo.id}>
-                  {algo.name} ({algo.speed_tag})
-                </option>
-              ))}
+              {activeAlgorithms.map((algo) => {
+                const tagPrefix = algo.tag ? `[${algo.tag}] ` : '';
+                const disabledReason = algo.available === false ? ` (Disabled: ${algo.unavailable_reason || 'Package uninstalled'})` : '';
+                return (
+                  <option key={algo.id} value={algo.id} disabled={algo.available === false}>
+                    {tagPrefix}{algo.name} — {algo.speed_tag}{disabledReason}
+                  </option>
+                );
+              })}
             </select>
           </div>
           {selectedAlgo && (
@@ -145,24 +154,103 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
         </div>
       </div>
 
-      {/* Infeasible Parts Alert */}
-      {currentResult && currentResult.unplaced_parts.length > 0 && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3 text-red-800 text-xs">
-          <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-bold">{t('unplaced_alert_title')} ({currentResult.unplaced_parts.length})</div>
-            <ul className="list-disc pl-4 space-y-0.5 text-red-700">
-              {currentResult.unplaced_parts.map((p, idx) => (
-                <li key={idx}>
-                  <span className="font-semibold">{p.sku}</span> ({p.length}" × {p.width}" × {p.height}", Qty: {p.quantity}) —{' '}
-                  {currentResult.validation.errors.find((err) => err.includes(p.sku)) ||
-                    'Exceeds usable block size or insufficient capacity.'}
-                </li>
-              ))}
-            </ul>
+      {/* Infeasible / Unplaced Parts Grouped Diagnostic Alert */}
+      {currentResult && (currentResult.unplaced_parts?.length || 0) > 0 && (() => {
+        const unplacedList = currentResult.unplaced_parts || [];
+        const totalUnplacedPieces = unplacedList.reduce((acc, u) => acc + (u.unplaced_qty ?? u.quantity), 0);
+        const totalDemandedPieces = currentResult.total_parts_demanded || 0;
+        const visibleUnplaced = showAllUnplaced ? unplacedList : unplacedList.slice(0, 10);
+
+        return (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg overflow-hidden text-xs shadow-sm">
+            {/* Collapsible Header */}
+            <div
+              onClick={() => setIsUnplacedExpanded(!isUnplacedExpanded)}
+              className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-amber-100/60 transition-colors select-none"
+            >
+              <div className="flex items-center space-x-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div className="font-bold text-amber-900">
+                  {t('unplaced_alert_summary', {
+                    skus: unplacedList.length,
+                    unplaced: totalUnplacedPieces,
+                    demanded: totalDemandedPieces,
+                    defaultValue: `${unplacedList.length} part types could not be fully placed (${totalUnplacedPieces} of ${totalDemandedPieces} pieces)`
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 text-amber-800 text-xs font-medium">
+                <span>{isUnplacedExpanded ? 'Collapse' : 'Expand Details'}</span>
+                {isUnplacedExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </div>
+
+            {/* Expanded Table */}
+            {isUnplacedExpanded && (
+              <div className="border-t border-amber-200 bg-white p-3 space-y-2">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-2.5">{t('unplaced_table_sku', 'Part SKU & Name')}</th>
+                        <th className="py-2 px-2.5">{t('unplaced_table_dims', 'Dimensions (L×W×H)')}</th>
+                        <th className="py-2 px-2.5">{t('unplaced_table_qty', 'Req / Placed / Unplaced')}</th>
+                        <th className="py-2 px-2.5">{t('unplaced_table_reason', 'Diagnosis & Reason')}</th>
+                        <th className="py-2 px-2.5">{t('unplaced_table_action', 'Suggested Fix')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {visibleUnplaced.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/70">
+                          <td className="py-2 px-2.5 font-medium text-slate-900">
+                            <div>{item.sku}</div>
+                            {item.name && item.name !== item.sku && (
+                              <div className="text-[11px] text-slate-500 font-normal">{item.name}</div>
+                            )}
+                          </td>
+                          <td className="py-2 px-2.5 font-mono text-[11px]">
+                            {item.length}" × {item.width}" × {item.height}"
+                          </td>
+                          <td className="py-2 px-2.5 font-mono">
+                            <span className="text-slate-600">{item.requested_qty ?? item.quantity} req</span> /{' '}
+                            <span className="text-emerald-600 font-medium">{item.placed_qty ?? 0} placed</span> /{' '}
+                            <span className="text-red-600 font-bold">{item.unplaced_qty ?? item.quantity} unplaced</span>
+                          </td>
+                          <td className="py-2 px-2.5">
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 mb-0.5">
+                              {item.reason_code || 'UNPLACED'}
+                            </span>
+                            <div className="text-slate-600 text-[11px]">{item.message || 'Exceeds capacity or usable dimensions.'}</div>
+                          </td>
+                          <td className="py-2 px-2.5 text-blue-700 font-medium">
+                            {item.suggested_action || 'Add more stock blocks or adjust part dimensions.'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {unplacedList.length > 10 && (
+                  <div className="pt-2 text-center border-t border-slate-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAllUnplaced(!showAllUnplaced);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                    >
+                      {showAllUnplaced
+                        ? t('unplaced_show_less', 'Show less')
+                        : t('unplaced_show_all', { count: unplacedList.length, defaultValue: `Show all ${unplacedList.length} items` })}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Algorithm Benchmark Comparison Table */}
       {comparisonResults && comparisonResults.length > 0 && (
@@ -188,6 +276,9 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
                   <th className="py-2.5 px-3 text-center">{t('blocks_used')}</th>
                   <th className="py-2.5 px-3 text-center">{t('cuts_count')}</th>
                   <th className="py-2.5 px-3 text-right">{t('runtime')}</th>
+                  {hasSolverStatus && (
+                    <th className="py-2.5 px-3 text-center">{t('solver_status_label')}</th>
+                  )}
                   <th className="py-2.5 px-3 text-center">{t('status')}</th>
                   <th className="py-2.5 px-3 text-center">Badge</th>
                 </tr>
@@ -233,6 +324,25 @@ export const OptimizationSection: React.FC<OptimizationSectionProps> = ({
                       <td className="py-2 px-3 text-right text-slate-500 font-mono text-[11px]">
                         {r.runtime_ms.toFixed(1)} ms
                       </td>
+                      {hasSolverStatus && (
+                        <td className="py-2 px-3 text-center">
+                          {r.fallback_used ? (
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <span>{t('fallback_used_label')}</span>
+                            </span>
+                          ) : r.solver_status ? (
+                            <span
+                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200"
+                              title={r.solver_status}
+                            >
+                              <span>{r.solver_status.startsWith('OPTIMAL') ? 'Optimal (Model)' : r.solver_status}</span>
+                              {r.solver_time_ms ? <span className="text-[9px] text-blue-500">({r.solver_time_ms}ms)</span> : null}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">Heuristic</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-2 px-3 text-center">
                         {isValid ? (
                           <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">

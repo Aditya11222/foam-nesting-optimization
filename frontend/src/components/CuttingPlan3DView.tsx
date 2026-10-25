@@ -63,7 +63,7 @@ export const CuttingPlan3DView: React.FC<CuttingPlan3DViewProps> = ({ result }) 
         {/* Block Pagination Tabs */}
         <div className="flex items-center space-x-2">
           <span className="text-xs font-bold text-slate-700">Block:</span>
-          <div className="flex items-center space-x-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             {result.blocks.map((b, idx) => {
               const isSelected = idx === selectedBlockIndex;
               return (
@@ -84,6 +84,16 @@ export const CuttingPlan3DView: React.FC<CuttingPlan3DViewProps> = ({ result }) 
                 </button>
               );
             })}
+            {result.machine && (
+              <span className="text-[11px] font-medium text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-md shadow-2xs">
+                Station: <strong className="text-slate-700">{activeBlock.assigned_machine_name || result.machine.name}</strong>
+              </span>
+            )}
+            {result.solver_status && (
+              <span className="text-[10px] font-mono text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-md" title={result.solver_status}>
+                CP-SAT: {result.solver_status.startsWith('OPTIMAL') ? 'Optimal (Model)' : result.solver_status}
+              </span>
+            )}
           </div>
         </div>
 
