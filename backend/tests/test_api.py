@@ -78,11 +78,12 @@ def test_api_optimize_endpoint():
     assert len(data["blocks"]) >= 1
 
 
-def test_api_optimize_rejects_free_waterjet():
+def test_api_optimize_rejects_incompatible_machine():
     payload = {
-        "job_id": "API-TEST-FREE",
+        "job_id": "API-TEST-INCOMPATIBLE",
         "grade": "HR-40",
-        "machine_id": "saw-wj",  # waterjet
+        "machine_id": "saw-wj",  # waterjet requires free
+        "algorithm_id": "best_fit_decreasing",  # guillotine
         "parts": [
             {
                 "id": "p-1",
@@ -97,5 +98,29 @@ def test_api_optimize_rejects_free_waterjet():
         ]
     }
     res = client.post("/api/optimize", json=payload)
-    assert res.status_code == 501
-    assert "waterjet" in res.json()["detail"].lower()
+    assert res.status_code == 400
+    assert "not compatible" in res.json()["detail"].lower()
+
+
+def test_api_optimize_waterjet_clearance_limit_exceeded():
+    payload = {
+        "job_id": "API-TEST-CLEARANCE",
+        "grade": "HR-40",  # HR-40 bun usable height is 38" > 36" (saw-wj limit is 36")
+        "machine_id": "saw-wj",
+        "algorithm_id": "free_nesting_heuristic",
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Large-Cushion",
+                "name": "Large Cushion",
+                "grade": "HR-40",
+                "length": 60.0,  # Exceeds remnant length (48"), forcing bun allocation
+                "width": 30.0,
+                "height": 10.0,
+                "quantity": 5
+            }
+        ]
+    }
+    res = client.post("/api/optimize", json=payload)
+    assert res.status_code == 422
+    assert "maximum throat cut height" in res.json()["detail"].lower()

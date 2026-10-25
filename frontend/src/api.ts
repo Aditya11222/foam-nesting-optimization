@@ -1,4 +1,11 @@
-import type { FoamGrade, MachineProfile, OptimizationResult, RemnantAgingStatus } from './types';
+import type {
+  FoamGrade,
+  MachineProfile,
+  OptimizationResult,
+  OptimizationRequest,
+  AlgorithmInfo,
+  RemnantAgingStatus,
+} from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:8000/api');
 
@@ -14,6 +21,12 @@ export async function fetchMachines(): Promise<MachineProfile[]> {
   return res.json();
 }
 
+export async function fetchAlgorithms(): Promise<AlgorithmInfo[]> {
+  const res = await fetch(`${API_BASE}/algorithms`);
+  if (!res.ok) throw new Error('Failed to load algorithms');
+  return res.json();
+}
+
 export async function fetchSampleJobs(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/jobs/samples`);
   if (!res.ok) throw new Error('Failed to load sample jobs');
@@ -26,7 +39,7 @@ export async function fetchRemnantAging(): Promise<RemnantAgingStatus[]> {
   return res.json();
 }
 
-export async function optimizeJob(payload: any): Promise<OptimizationResult> {
+export async function optimizeJob(payload: OptimizationRequest): Promise<OptimizationResult> {
   const res = await fetch(`${API_BASE}/optimize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -35,6 +48,19 @@ export async function optimizeJob(payload: any): Promise<OptimizationResult> {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || 'Optimization failed');
+  }
+  return res.json();
+}
+
+export async function compareAlgorithms(payload: OptimizationRequest): Promise<OptimizationResult[]> {
+  const res = await fetch(`${API_BASE}/optimize/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Algorithm comparison failed');
   }
   return res.json();
 }

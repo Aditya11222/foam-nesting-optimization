@@ -19,6 +19,24 @@ export interface MachineProfile {
   preferred_direction: string;
 }
 
+export interface AlgorithmInfo {
+  id: string;
+  name: string;
+  description: string;
+  speed_tag: string;
+  supported_cut_types: string[];
+}
+
+export interface BlockInput {
+  id?: string;
+  nominal_length: number;
+  nominal_width: number;
+  nominal_height: number;
+  grade: string;
+  quantity: number;
+  cost?: number;
+}
+
 export interface PartItem {
   id: string;
   sku: string;
@@ -66,7 +84,7 @@ export interface RemnantOutput {
 export interface CutStep {
   step_number: number;
   stage: number;
-  cut_type: 'skin_trim' | 'horizontal_slab' | 'vertical_rip' | 'crosscut';
+  cut_type: 'skin_trim' | 'horizontal_slab' | 'vertical_rip' | 'crosscut' | 'contour_path';
   axis: 'X' | 'Y' | 'Z';
   position_in: number;
   position_display: string;
@@ -76,6 +94,7 @@ export interface CutStep {
   produces_description_es: string;
   remnant_prompt_en?: string;
   remnant_prompt_es?: string;
+  target_part_id?: string;
 }
 
 export interface BlockLayout {
@@ -103,9 +122,27 @@ export interface BlockLayout {
   material_recovery_pct: number;
 }
 
+export interface ValidationResult {
+  is_valid: boolean;
+  errors: string[];
+  warnings: string[];
+  volume_reconciliation: {
+    total_gross_volume: number;
+    total_usable_volume: number;
+    total_skin_trim_volume: number;
+    total_parts_volume: number;
+    total_remnants_volume: number;
+    total_kerf_volume: number;
+    total_scrap_volume: number;
+    reconciliation_delta: number;
+  };
+}
+
 export interface OptimizationResult {
   job_id: string;
   grade: string;
+  algorithm_id: string;
+  algorithm_name: string;
   solution_type: string;
   timestamp: string;
   machine: MachineProfile;
@@ -124,6 +161,25 @@ export interface OptimizationResult {
   net_utilization_pct: number;
   total_cuts_count: number;
   estimated_saw_time_minutes: number;
+  runtime_ms: number;
+  validation: ValidationResult;
+  is_best?: boolean;
+}
+
+export interface OptimizationRequest {
+  job_id: string;
+  order_id?: string;
+  customer?: string;
+  grade: string;
+  machine_id?: string;
+  parts: PartItem[];
+  prefer_remnants_first?: boolean;
+  skin_trim_per_face?: number;
+  algorithm_id?: string;
+  time_budget_seconds?: number;
+  seed?: number;
+  available_blocks?: BlockInput[];
+  kerf?: number;
 }
 
 export interface RemnantAgingStatus {

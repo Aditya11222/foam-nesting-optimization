@@ -186,11 +186,12 @@ class CutType(str, Enum):
     HORIZONTAL_SLAB = "horizontal_slab"
     VERTICAL_RIP = "vertical_rip"
     CROSSCUT = "crosscut"
+    CONTOUR = "contour_path"
 
 
 class CutStep(BaseModel):
     step_number: int
-    stage: int                        # Stage 1: Slabs, Stage 2: Rips, Stage 3: Crosscuts
+    stage: int                        # Stage 1: Slabs, Stage 2: Rips, Stage 3: Crosscuts, Stage 4: Contour
     cut_type: CutType
     axis: Literal["X", "Y", "Z"]
     position_in: float
@@ -201,6 +202,7 @@ class CutStep(BaseModel):
     produces_description_es: str
     remnant_prompt_en: Optional[str] = None
     remnant_prompt_es: Optional[str] = None
+    target_part_id: Optional[str] = None
 
 
 class BlockLayout(BaseModel):
@@ -228,6 +230,36 @@ class BlockLayout(BaseModel):
     material_recovery_pct: float      # (parts_volume + remnants_volume) / gross_volume * 100
 
 
+class BlockInput(BaseModel):
+    id: Optional[str] = None
+    nominal_length: float = Field(default=108.0)
+    nominal_width: float = Field(default=82.0)
+    nominal_height: float = Field(default=40.0)
+    grade: str = "HR-40"
+    quantity: int = Field(default=1, ge=1)
+    cost: float = Field(default=0.0)
+
+    @field_validator("nominal_length", "nominal_width", "nominal_height")
+    @classmethod
+    def validate_nominal_dims(cls, v: float, info) -> float:
+        return snap_to_16th(v, info.field_name)
+
+
+class AlgorithmInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    speed_tag: str
+    supported_cut_types: List[str] = ["guillotine"]
+
+
+class ValidationResult(BaseModel):
+    is_valid: bool = True
+    errors: List[str] = []
+    warnings: List[str] = []
+    volume_reconciliation: Dict[str, float] = {}
+
+
 class OptimizationRequest(BaseModel):
     job_id: str
     order_id: Optional[str] = None
@@ -237,11 +269,18 @@ class OptimizationRequest(BaseModel):
     parts: List[PartItem]
     prefer_remnants_first: bool = True
     skin_trim_per_face: float = 1.0
+    algorithm_id: str = "best_fit_decreasing"
+    time_budget_seconds: float = 10.0
+    seed: int = 42
+    available_blocks: Optional[List[BlockInput]] = None
+    kerf: Optional[float] = None
 
 
 class OptimizationResult(BaseModel):
     job_id: str
     grade: str
+    algorithm_id: str = "best_fit_decreasing"
+    algorithm_name: str = "Best-Fit Decreasing"
     solution_type: str = "heuristic solution"   # NEVER claim optimality
     timestamp: datetime
     machine: MachineProfile
@@ -260,3 +299,6 @@ class OptimizationResult(BaseModel):
     net_utilization_pct: float
     total_cuts_count: int
     estimated_saw_time_minutes: float
+    runtime_ms: float = 0.0
+    validation: ValidationResult = Field(default_factory=ValidationResult)
+    is_best: bool = False

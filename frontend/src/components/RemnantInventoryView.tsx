@@ -108,26 +108,26 @@ export const RemnantInventoryView: React.FC = () => {
   }, [thresholdDays]);
 
   return (
-    <div className="flex-1 flex flex-col p-6 bg-slate-950 text-slate-100 overflow-y-auto">
+    <div className="flex-1 flex flex-col p-6 bg-[#F8FAFC] text-[#0F172A] overflow-y-auto">
       {/* Header card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl mb-6">
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl p-6 shadow-soft mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2 text-sky-400 text-xs font-bold uppercase tracking-widest">
+            <div className="flex items-center space-x-2 text-[#2563EB] text-xs font-bold uppercase tracking-widest">
               <Package className="w-4 h-4" />
               <span>Domain Rules Demo (Section 3)</span>
             </div>
-            <h1 className="text-2xl font-black text-white mt-1">
+            <h1 className="text-2xl font-black text-[#0F172A] mt-1">
               {t('remnant_inventory_header')}
             </h1>
-            <p className="text-sm text-slate-400 mt-1 max-w-3xl leading-relaxed">
+            <p className="text-sm text-[#475569] mt-1 max-w-3xl leading-relaxed">
               {t('remnant_subtitle')}
             </p>
           </div>
 
-          <div className="flex items-center space-x-3 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700">
-            <Clock className="w-4 h-4 text-sky-400" />
-            <span className="text-xs text-slate-300 font-medium">Degradation Threshold:</span>
+          <div className="flex items-center space-x-3 bg-[#F8FAFC] px-4 py-2.5 rounded-xl border border-[#CBD5E1]">
+            <Clock className="w-4 h-4 text-[#2563EB]" />
+            <span className="text-xs text-[#475569] font-medium">Degradation Threshold:</span>
             <div className="flex items-center space-x-1.5 font-mono text-xs">
               {[2, 3, 4].map((d) => (
                 <button
@@ -135,8 +135,8 @@ export const RemnantInventoryView: React.FC = () => {
                   onClick={() => setThresholdDays(d)}
                   className={`px-2.5 py-1 rounded font-bold transition-all ${
                     thresholdDays === d
-                      ? 'bg-sky-500 text-white shadow'
-                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      ? 'bg-[#2563EB] text-white shadow-soft'
+                      : 'bg-white text-[#475569] hover:bg-[#F1F5F9] border border-[#E2E8F0]'
                   }`}
                 >
                   {d} days
@@ -149,99 +149,99 @@ export const RemnantInventoryView: React.FC = () => {
 
       {/* Remnant inventory table */}
       {loading ? (
-        <div className="p-8 text-center text-slate-400">Loading remnant inventory...</div>
+        <div className="p-8 text-center text-[#64748B]">Loading remnant inventory...</div>
       ) : (
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-850 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th className="py-3.5 px-4">Remnant Code</th>
-                <th className="py-3.5 px-3">Grade</th>
-                <th className="py-3.5 px-3">Cut Date & Age</th>
-                <th className="py-3.5 px-3">Status</th>
-                <th className="py-3.5 px-3">Nominal Dims</th>
-                <th className="py-3.5 px-3">Effective Usable Dims</th>
-                <th className="py-3.5 px-3">Vol Loss</th>
-                <th className="py-3.5 px-3">Usability</th>
-                <th className="py-3.5 px-4">Location & Recommendation</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
-              {remnants.map((r) => (
-                <tr
-                  key={r.remnant_id}
-                  className={`hover:bg-slate-800/40 transition-colors ${
-                    r.is_degraded ? 'bg-amber-950/10' : ''
-                  }`}
-                >
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-200">
-                    {r.code}
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <span className="px-2 py-0.5 rounded font-mono font-semibold bg-slate-800 text-sky-300 border border-slate-700">
-                      {r.grade}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <div className="text-slate-300 font-mono">{r.cut_date}</div>
-                    <div className="text-[10px] text-slate-500">
-                      {r.age_days} {t('age_days').toLowerCase()} ago
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-3">
-                    {r.is_degraded ? (
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
-                        <AlertTriangle className="w-3 h-3" />
-                        <span>{t('oxidized_degraded')}</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                        <CheckCircle className="w-3 h-3" />
-                        <span>{t('fresh_window')}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3 font-mono text-slate-400">
-                    {r.original_dims[0]}"×{r.original_dims[1]}"×{r.original_dims[2]}"
-                  </td>
-                  <td className="py-3.5 px-3 font-mono font-bold text-sky-300">
-                    {r.effective_dims[0]}"×{r.effective_dims[1]}"×{r.effective_dims[2]}"
-                  </td>
-                  <td className="py-3.5 px-3 font-mono font-semibold">
-                    {r.volume_loss_pct > 0 ? (
-                      <span className="text-rose-400">−{r.volume_loss_pct}%</span>
-                    ) : (
-                      <span className="text-slate-500">0%</span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-12 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            r.usability_score > 0.7 ? 'bg-emerald-500' : 'bg-amber-500'
-                          }`}
-                          style={{ width: `${r.usability_score * 100}%` }}
-                        ></div>
-                      </div>
-                      <span className="font-mono text-slate-300 font-bold">
-                        {r.usability_score}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="font-semibold text-slate-300">{r.storage_location}</div>
-                    <div className="text-[11px] text-slate-400 italic">
-                      {currentLang === 'es' ? r.recommendation_es : r.recommendation_en}
-                    </div>
-                  </td>
+        <div className="bg-white border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-soft">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#F1F5F9] text-[#475569] border-b border-[#E2E8F0] uppercase tracking-wider text-[11px] font-semibold">
+                <tr>
+                  <th className="py-3.5 px-4">Remnant Code</th>
+                  <th className="py-3.5 px-3">Grade</th>
+                  <th className="py-3.5 px-3">Cut Date & Age</th>
+                  <th className="py-3.5 px-3">Status</th>
+                  <th className="py-3.5 px-3">Nominal Dims</th>
+                  <th className="py-3.5 px-3">Effective Usable Dims</th>
+                  <th className="py-3.5 px-3">Vol Loss</th>
+                  <th className="py-3.5 px-3">Usability</th>
+                  <th className="py-3.5 px-4">Location & Recommendation</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#E2E8F0]">
+                {remnants.map((r) => (
+                  <tr
+                    key={r.remnant_id}
+                    className={`hover:bg-[#F8FAFC] transition-colors ${
+                      r.is_degraded ? 'bg-[#FFFBEB]/40' : ''
+                    }`}
+                  >
+                    <td className="py-3.5 px-4 font-mono font-bold text-[#0F172A]">
+                      {r.code}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <span className="px-2 py-0.5 rounded font-mono font-semibold bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]">
+                        {r.grade}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <div className="text-[#0F172A] font-mono font-semibold">{r.cut_date}</div>
+                      <div className="text-[10px] text-[#64748B]">
+                        {r.age_days} {t('age_days').toLowerCase()} ago
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      {r.is_degraded ? (
+                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#FFFBEB] text-[#D97706] border border-[#FDE68A] text-[10px] font-bold">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>{t('oxidized_degraded')}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#F0FDF4] text-[#16A34A] border border-[#BBF7D0] text-[10px] font-bold">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>{t('fresh_window')}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-3 font-mono text-[#64748B]">
+                      {r.original_dims[0]}"×{r.original_dims[1]}"×{r.original_dims[2]}"
+                    </td>
+                    <td className="py-3.5 px-3 font-mono font-bold text-[#2563EB]">
+                      {r.effective_dims[0]}"×{r.effective_dims[1]}"×{r.effective_dims[2]}"
+                    </td>
+                    <td className="py-3.5 px-3 font-mono font-semibold">
+                      {r.volume_loss_pct > 0 ? (
+                        <span className="text-[#DC2626]">−{r.volume_loss_pct}%</span>
+                      ) : (
+                        <span className="text-[#64748B]">0%</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-12 bg-[#E2E8F0] rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              r.usability_score > 0.7 ? 'bg-[#16A34A]' : 'bg-[#D97706]'
+                            }`}
+                            style={{ width: `${r.usability_score * 100}%` }}
+                          ></div>
+                        </div>
+                        <span className="font-mono text-[#0F172A] font-bold">
+                          {r.usability_score}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-[#0F172A]">{r.storage_location}</div>
+                      <div className="text-[11px] text-[#64748B] italic">
+                        {currentLang === 'es' ? r.recommendation_es : r.recommendation_en}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
     </div>
   );
