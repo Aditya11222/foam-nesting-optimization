@@ -1,0 +1,250 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* Neutrals (warm, brownish-light) */
+    --bg-canvas: #F6F1EA;
+    --bg-surface: #FFFDF9;
+    --bg-raised: #F0E8DD;
+    --bg-row-hover: #F8F2E9;
+    --border-hairline: #E7DDD0;
+    --border-strong: #D8CAB9;
+    --text-ink: #2B2118;
+    --text-secondary: #6B5B4D;
+    --text-muted: #9A8B7C;
+
+    /* Brand */
+    --brand-cocoa: #7A5C45;
+    --brand-cocoa-top: #84644B;
+    --brand-cocoa-hover: #654A36;
+    --brand-cocoa-pressed: #553E2D;
+    --brand-cocoa-tint: #F0E6DB;
+    --brand-cocoa-focus: rgba(122, 92, 69, 0.35);
+
+    /* Accent & Support */
+    --accent-terracotta: #C07A55;
+    --accent-terracotta-tint: #F7E7DC;
+    --support-sage: #7D8F7A;
+    --support-sage-tint: #E8EDE5;
+
+    /* Semantic Status */
+    --status-success: #6F8A6B;
+    --status-success-tint: #E8EFE5;
+    --status-warning: #BD8B2F;
+    --status-warning-tint: #F7EDD6;
+    --status-error: #A64B42;
+    --status-error-tint: #F4E3DF;
+
+    /* Charts & Skeletons */
+    --chart-grid: #EADFD1;
+    --skeleton-base: #EFE6DA;
+    --skeleton-shimmer: #F7F1E8;
+  }
+
+  html,
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-ink);
+    font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Page Wash + Barely Visible Paper Grain (2.5% opacity SVG feTurbulence on canvas only) */
+.workbench-canvas {
+  background-color: var(--bg-canvas);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E"),
+    linear-gradient(160deg, #FBF7F1 0%, #F3EADF 55%, #EADCCB 100%);
+  background-repeat: repeat, no-repeat;
+  background-attachment: fixed;
+}
+
+/* Header Band Soft Horizontal Fade */
+.header-band {
+  background: linear-gradient(90deg, #FFFDF9 0%, #F7EFE4 100%);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+/* Primary Button Tone-on-Tone Vertical Gradient (6-8% shift only) */
+.btn-primary {
+  background: linear-gradient(180deg, var(--brand-cocoa-top) 0%, var(--brand-cocoa) 100%);
+  color: #FFFDF9;
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 150ms ease-out, transform 150ms ease-out, opacity 150ms ease-out;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-cocoa-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--brand-cocoa-pressed);
+  transform: translateY(0.5px);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--brand-cocoa);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, transform 150ms ease-out;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--brand-cocoa-tint);
+  color: var(--brand-cocoa-hover);
+}
+.btn-secondary:active:not(:disabled) {
+  background-color: var(--bg-raised);
+  transform: translateY(0.5px);
+}
+.btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Destructive Outline Button */
+.btn-destructive {
+  background-color: transparent;
+  color: var(--status-error);
+  border: 1px solid var(--status-error);
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 150ms ease-out, transform 150ms ease-out;
+}
+.btn-destructive:hover:not(:disabled) {
+  background-color: var(--status-error-tint);
+}
+.btn-destructive:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+/* Focus Ring */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--brand-cocoa-focus);
+  outline-offset: 2px;
+}
+
+/* Warm Skeleton Shimmer (1.4s cycle) */
+@keyframes warmShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-warm {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 25%,
+    var(--skeleton-shimmer) 50%,
+    var(--skeleton-base) 75%
+  );
+  background-size: 200% 100%;
+  animation: warmShimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* Foam Slicing Line Sweep Animation */
+@keyframes sliceSweep {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(34px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.slice-sweep-line {
+  animation: sliceSweep 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton-warm {
+    animation: none;
+    background: var(--skeleton-base);
+  }
+  .slice-sweep-line {
+    animation: none;
+  }
+}
+
+/* Warm Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-raised);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Printable Cut Sheet formatting */
+@media print {
+  body,
+  .workbench-canvas {
+    background: #FFFDF9 !important;
+    background-image: none !important;
+    color: #2B2118 !important;
+  }
+  header,
+  aside,
+  nav,
+  button,
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  canvas {
+    max-height: 350px !important;
+  }
+}

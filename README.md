@@ -1,206 +1,80 @@
-# Tatras NestPro: 3D Foam Slicing & Nesting Optimizer
+# Tatras NestPro — 3D Foam Nesting & Cutting Optimization
 
-Tatras NestPro is a high-performance 3D polyurethane foam slicing and nesting optimizer designed for industrial saw operators and production planners. It optimizes the conversion of large raw flexible foam buns into finished three-dimensional cushions, bolster cores, corner cubes, support pads, and back wedges with maximum material recovery, operator safety, and strict volume conservation.
-
-The application features a single-page, light-themed, interactive worker interface (no complex multi-step wizards) integrating a FastAPI backend engine with a React 19 + Tailwind CSS + Three.js + Recharts frontend.
+Tatras NestPro is an industrial polyurethane foam bun nesting, guillotine slicing, and cutting optimization platform built in React, TypeScript, Tailwind CSS, Three.js (`@react-three/fiber` / `@react-three/drei`), and Recharts.
 
 ---
 
-## 1. Quick Start
+## 1. Implemented vs. Placeholder Features
 
-### Prerequisites
-- Python 3.10+ (with virtual environment in `.venv`)
-- Node.js 18+ & npm
+### Implemented (Full End-to-End Flow)
+- **Step 1 — Setup & Data Import**:
+  - Foam grade selector (`HR-40`, `HR-30`, `VE-50`) with automatic block/part synchronization and an optional `"Mixed Grades"` toggle.
+  - Machine profile selector (`Guillotine`, `Waterjet`, `Wire`, `CNC`, `Auto`) with cut-type badges, max cut height, and automatic kerf sync.
+  - Skin trim per face and blade kerf inputs in inches snapped to `1/16"`, inline validation, and live usable interior readout (`Nominal - 2 × Trim`).
+  - Editable Available Blocks and Parts Demand tables with orientation rules (`rise-locked`, `free-in-plane`, `any`), SKU color swatches + non-color pattern tags, and `"Load Sample"` preset (Job #4821, 154 pieces).
+- **Step 2 — Algorithm Selection & Placement**:
+  - 6 algorithms (`Best-Fit Decreasing`, `First-Fit Decreasing`, `Simulated Annealing`, `OR-Tools Block Assignment`, `OR-Tools Pattern Selection`, `Free Nesting`) with machine compatibility enforcement.
+  - `"Run Optimization"` and `"Compare All Algorithms"` with animated isometric foam-bun slicing loader (`FoamSlicingLoader`) and elapsed timer.
+  - Cached per-algorithm results, benchmark comparison table with `"Best in this comparison"` badge + heuristic footnote, and a single grouped collapsible panel for any unplaced parts.
+  - Input staleness detection (`Stale` banner + badge) that disables 3D generation and CSV export until re-run.
+- **Step 3 — 3D Cutting Plan & Visualization**:
+  - Interactive Three.js / React-Three-Fiber scene on a warm `#F3EDE4` background with hemisphere + directional lighting and soft contact shadows.
+  - Translucent outer bun shell (`0.18` opacity), `#E2D3BF` skin-trim crust layer with dashed outline, matte `MeshStandardMaterial` parts (`0.85` roughness, `0.12"` visual seam gap), sage-grey remnants, and hatched warm-grey scrap boxes.
+  - Animated `450ms` Terracotta (`#C07A55`) cut plane with floating monospace label, docked 4-zone HUD (Layer chips, Camera view presets `Isometric / Top / Front / Side / Reset`, Cut Stepper with keyboard arrow support, and SKU Legend), plus Ordered Cut List and Retained Remnants tables below.
+- **Step 4 — Results, Analytics & Shop-Floor Execution**:
+  - 9 KPI cards (1 Hero KPI: `Waste Reduced vs. Shop Baseline` + 8 supporting KPIs) with `Newsreader` display numerals and `useCountUp` animation.
+  - Collapsible editable Cost & Baseline Assumptions panel (`$/cu ft` per grade, saw rate `$/hr`, cycle seconds per cut, remnant reuse credit `%`, shop baseline yield `%`).
+  - 5 Recharts visualizations (`Volume Breakdown`, `Algorithm Yield Comparison`, `Shop Baseline vs. Optimized`, `Per-Bun Interior Utilization`, `Estimated Job Cost Breakdown`).
+  - 4 execution tabs: **Saw Operator Station** (with `48px` touch `"Confirm cut"` buttons), **Planned vs. Actual Variance Table** (editable actuals with live delta columns, labelled `"demo: not saved"`), **Printable Traveler**, and **Remnants & Aging**.
+  - **UTF-8 with BOM (`\uFEFF`) CSV Export** containing all 6 reconciled sections (`SUMMARY`, `PARTS_PLACED`, `CUT_SEQUENCE`, `REMNANTS`, `ALGORITHM_COMPARISON`, `BASELINE_VS_OPTIMIZED`).
 
-### Starting the Application Locally
-
-1. **Activate Python Virtual Environment & Run Tests**:
-   ```bash
-   cd foam-nesting-optimization
-   .venv\Scripts\activate
-   pytest backend/tests
-   ```
-
-2. **Launch the FastAPI Backend Daemon** (port 8000):
-   ```bash
-   uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
-   ```
-
-3. **Launch the Vite Frontend Dev Server** (port 5173):
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-   Open `http://127.0.0.1:5173` in your browser.
-
----
-
-## 2. Core Worker Flow (4 Main Steps)
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   TATRAS NESTPRO                                       │
-├─────────────────────┬──────────────────────────────────────────────────────────────────┤
-│ STEP 1: INPUT       │ STEP 2: OPTIMIZE & EVALUATE                                      │
-│ • Foam Grade Sync   │ • Algorithm Selection (BFD, FFD, SA, Free Nesting)               │
-│ • Machine Profile   │ • Real-time Solve (<35ms heuristic, <3s SA)                      │
-│ • Stock Bun Dims    │ • Benchmark Comparison Table (Yield, Scrap, Cuts, Runtime)       │
-│ • 1/16" Snap Parts  │ • Heuristic Solution Transparency & Validation Banner            │
-│ • Rise Orientation  ├──────────────────────────────────────────────────────────────────┤
-│ • Remnant Retention │ STEP 3: 3D CUTTING PLAN                                          │
-│                     │ • Interactive Light Three.js 3D Block Viewer                     │
-│                     │ • Orthogonal Guillotine Cut Planes & CNC Contour Mesh Highlights │
-│                     │ • Step-by-Step Operator Saw Sequencer Slider                     │
-│                     ├──────────────────────────────────────────────────────────────────┤
-│                     │ STEP 4: EXECUTE & TRACK DASHBOARD                                │
-│                     │ • Financial Cost Model ($/cu ft per grade, saw $/hr, remnant %)  │
-│                     │ • Executive KPI Cards (Waste Reduced, Cost Saved, Job Cost)      │
-│                     │ • Naive Manual Baseline vs. Heuristic Comparison                 │
-│                     │ • 6 Light-Themed Recharts Visualizations                         │
-│                     │ • Planned vs. Actual Floor Execution Tracking Table              │
-│                     │ • Recorded Usable Remnants Inventory Table                       │
-│                     │ • Multi-Section CSV Export (UTF-8 BOM)                           │
-└─────────────────────┴──────────────────────────────────────────────────────────────────┘
-```
+### Placeholders (Visibly Disabled by Design)
+- **Generate G-Code** button in the page header — disabled with `"planned, not yet available"` tooltip.
+- **Global Navigation Modules** (`Dashboard`, `Projects`, `Inventory`, `Reports`) — disabled with `"planned, not yet available"` tooltip (`Optimization` is active).
 
 ---
 
-## 3. Optimization Algorithms & Waterjet Profiling
+## 2. Switching Between Mock and HTTP Adapters
 
-The optimization engine features 4 pluggable algorithms registered in `backend/app/optimizer/registry.py`:
+By default, the frontend runs on the deterministic local TypeScript optimization engine (`src/api.ts` + `src/engine/packer.ts`) so that every volume figure (`parts + remnants + trim + kerf + scrap = gross bun volume`) reconciles offline and displays a `"Demo data"` indicator.
 
-| Algorithm ID | Name | Cut Type | Mechanism & Characteristics | Speed |
-|---|---|---|---|---|
-| `best_fit_decreasing` | **Best-Fit Decreasing (BFD)** | Guillotine | Sorts parts by volume descending; places into the tightest-fitting candidate remnant box. Employs rigid $Z \to X \to Y$ orthogonal slicing. | Ultra-fast (~10–20 ms) |
-| `first_fit_decreasing` | **First-Fit Decreasing (FFD)** | Guillotine | Sorts by largest dimension; places into the first fitting volume and executes **Min-Residual Axis Splitting** to preserve large, contiguous 3D remnant boxes. **Outperforms BFD on multi-part jobs.** | Fast (~12–25 ms) |
-| `simulated_annealing` | **Simulated Annealing (SA)** | Guillotine | Metaheuristic neighborhood search exploring part orderings and rotation configurations within a bounded time budget (default: 3.0s). Seeded with BFD. | Configurable (~1–3 s) |
-| `free_nesting_heuristic` | **3D Free Contour Nesting** | Free / Non-Guillotine | 3D maximal-empty-box anchor-point placement for CNC waterjet profilers (`saw-wj`). Accounts for stream kerf (`0.0625"`), enforces machine throat clearance limits (`36.0"`), and outputs sequential contour toolpaths. | Fast (~15–35 ms) |
-
-### Benchmark on Proposal Job #4821 (154 Demanded Parts across 5 SKUs)
-
-```
-===================================================================================================================
-BENCHMARK COMPARISON TABLE -- PROPOSAL JOB #4821 (154 TOTAL DEMANDED PARTS)
-===================================================================================================================
-Algorithm                              | Net Util % | Blocks | Scrap (cu ft) | Cuts  | Runtime (ms) | Status / Notes
--------------------------------------------------------------------------------------------------------------------
-Best-Fit Decreasing (BFD)              | 43.9%      | 3      | 24.2 cu ft    | 207   | 11.0 ms      | VALID
-First-Fit Decreasing (FFD)             | 65.8%      | 2      | 59.4 cu ft    | 261   | 15.3 ms      | VALID [BEST IN COMPARISON]
-Simulated Annealing (SA)               | 43.9%      | 3      | 24.2 cu ft    | 207   | 609.4 ms     | VALID
-OR-Tools Block Assignment + Slicing    | 56.2%      | 1*     | 21.1 cu ft    | 132   | 4058.5 ms    | VALID (CP-SAT optimal allocation)
-OR-Tools Pattern Selection (Fixed Pool)| 21.9%      | 6      | 53.7 cu ft    | 259   | 796.5 ms     | VALID (exact demand covered)
-===================================================================================================================
-*Detailed analysis and multi-job benchmarks available in docs/BENCHMARK_ORTOOLS.md.
-Disclaimer: CP-SAT proves mathematical optimality only for the volume/pattern allocation model. Physical layouts remain heuristic solutions.
-```
+To connect to the FastAPI backend (`/backend/app/main.py`):
+1. Set `VITE_API_URL` in your `.env` file (e.g. `VITE_API_URL=http://localhost:8000/api`) and wire the fetch calls in `src/api.ts` to:
+   - `GET ${VITE_API_URL}/algorithms`
+   - `POST ${VITE_API_URL}/optimize`
+   - `POST ${VITE_API_URL}/optimize/compare`
 
 ---
 
-## 4. Manufacturing Constraints & Strict Validation
+## 3. Design Token Reference (`src/tokens.ts` & `src/index.css`)
 
-Every result is run through `backend/app/optimizer/validator.py`:
+### Color Palette (Warm Workbench — Light Mode Only)
+| Token | CSS Variable | Hex / Value | Purpose |
+| :--- | :--- | :--- | :--- |
+| `canvas` | `--color-canvas` | `#F6F1EA` | Oat page canvas background with 2.5% SVG paper grain |
+| `surface` | `--color-surface` | `#FFFDF9` | Cream white card & table surface |
+| `raised` | `--color-raised` | `#F0E8DD` | Muted fill / table headers / secondary buttons |
+| `row-hover` | `--color-row-hover` | `#F8F2E9` | Table row hover state |
+| `hairline` | `--color-border-hairline` | `#E7DDD0` | 1px card & table dividers |
+| `strong` | `--color-border-strong` | `#D8CAB9` | Form input borders |
+| `ink` | `--color-ink` | `#2B2118` | Espresso primary text |
+| `secondary` | `--color-text-secondary` | `#6B5B4D` | Secondary labels & metadata |
+| `muted` | `--color-text-muted` | `#9A8B7C` | Non-essential hints & unit suffixes |
+| `cocoa` | `--color-cocoa` | `#7A5C45` | Brand primary actions & active indicators |
+| `terracotta` | `--color-terracotta` | `#C07A55` | Single highlight per view (best badge, active cut plane, hero delta) |
+| `sage` | `--color-sage` | `#7D8F7A` | Support accent, completed steps & remnants |
+| `status-success` | `--color-status-success` | `#6F8A6B` on `#E8EFE5` | Validated / Optimized status |
+| `status-warning` | `--color-status-warning` | `#BD8B2F` on `#F7EDD6` | Stale / Oxidation warning |
+| `status-error` | `--color-status-error` | `#A64B42` on `#F4E3DF` | Unplaced / Validation error |
 
-1. **Units & Snapping (1/16")**:
-   - All input dimensions snap to `0.0625"` increments (`round(v * 16) / 16`). Non-positive or sub-1/16" values are flagged inline.
-2. **Mandatory Skin Trim (~1" Per Face)**:
-   - Parts are placed strictly inside the post-trim usable interior:
-     $$\text{Usable Dimension} = \text{Nominal Dimension} - 2 \times \text{trim}$$
-3. **Saw & Waterjet Kerf Allowance**:
-   - Guillotine saws: blade thickness `0.125"` (1/8").
-   - Waterjet profiler: stream kerf `0.0625"` (1/16").
-   - Deducted structurally from residual sub-boxes.
-4. **Machine Clearance Limits**:
-   - Enforces throat clearance limits (e.g. `saw-wj` max throat cut height = `36.0"`). Blocks exceeding throat height are rejected with clear error messages.
-5. **Foam Rise Direction & Anisotropy (Z Axis)**:
-   - Polyurethane foams expand vertically along the Z axis.
-   - Permitted modes: `rise-locked` (vertical height locked to Z), `free-in-plane` (rotation in XY only), `any` (3D rotation).
-6. **Grade Synchronization**:
-   - Global foam grade selection (`HR-40`, `HR-30`, `VE-50`) synchronizes all block stocks and parts.
-   - Includes optional "Advanced: mixed grades" toggle for independent per-grade batching.
-7. **No Spatial Collisions & Boundary Check**:
-   - Pairwise 3D AABB intersection verification guarantees zero part overlaps.
-   - All part bounds $x + l \le \text{usable\_length}$, etc.
-8. **Volume Reconciliation Identity**:
-   - Strictly enforced across all algorithms:
-     $$\text{Parts Volume} + \text{Remnants} + \text{Scrap} + \text{Trim} + \text{Kerf} = \text{Gross Bun Volume}$$
+### Part & Chart Data Palette (`DATA_PALETTE`)
+`#7A5C45` (Cocoa), `#C07A55` (Terracotta), `#7D8F7A` (Sage), `#C9A55C` (Ochre), `#5F8A8B` (Slate Teal), `#8A7F9E` (Muted Plum).
 
----
+### Typography Scale
+- **UI (`Instrument Sans`)**: `14px/22px` body, `16px/24px` (`600`) card titles, `11.5px/16px` (`600`, uppercase, `+0.06em`) labels.
+- **Display (`Newsreader`)**: `28px/36px` page title, `40px/44px` hero KPI, `24px/32px` supporting KPIs (`tabular-nums`).
+- **Data (`IBM Plex Mono`)**: `12px–13px/20px` dimensions, IDs, cut sequences, and right-aligned table numerals (`tabular-nums`).
 
-## 5. Step 4: Execute & Track Dashboard and CSV Export
-
-Step 4 replaces basic summary metrics with an interactive operational and financial dashboard:
-
-1. **Financial Cost Model (Collapsible Panel)**:
-   - Material unit cost ($/cu ft) by grade (defaults: HR-40: $4.50, HR-30: $3.80, VE-50: $6.20).
-   - Saw operating machine rate (default: $65.00/hr).
-   - Usable remnant recovery credit % (default: 40% of raw foam cost).
-   - Live recalculation of all KPIs and charts when inputs change.
-2. **Naive Manual Baseline Comparison**:
-   - Simulates a single-orientation manual saw operator packing heuristic without 3D residual optimization.
-   - Computes baseline blocks, gross volume, scrap, saw time, and total cost to provide realistic financial savings comparisons.
-3. **Executive KPI Cards**:
-   - **Waste Reduced**: % and cu ft saved vs naive manual layout.
-   - **Cost Saved**: $ and % financial reduction.
-   - **Total Job Cost**: Net production expenditure (Material + Saw Time - Remnant Credit).
-   - **Finished Part Cost**: Average cost per finished piece nested.
-   - Labeled clearly: *"Estimated, based on demo assumptions."*
-4. **6 Light-Themed Visualizations (Recharts)**:
-   - Volume Breakdown (Parts, Remnants, Scrap, Trim, Kerf in cu ft).
-   - Algorithm Benchmark Comparison (Net Yield % vs Scrap %).
-   - Baseline vs. Optimized (Buns, Material Cost, Scrap Cost, Net Cost).
-   - Per-Block Utilization Stacked Bar (% Parts, Remnants, Kerf, Scrap).
-   - Cost Component Breakdown (Raw Foam, Saw Time, Remnant Credit).
-   - Machine Efficiency Trade-offs (Guillotine vs Waterjet on kerf, cut count, and time).
-5. **Shop-Floor Execution Tracking Table**:
-   - Planned vs. Actual yield and runtime tracking per block with live variance calculation and status progression (`Pending`, `In Progress`, `Completed`).
-   - Recorded Usable Remnants table showing code, dimensions, volume ($ft^3$), usability score %, and warehouse storage bay.
-   - Smooth-scroll button returning operator to Step 3 cut sequencer.
-6. **Multi-Section CSV Export**:
-   - Includes UTF-8 BOM (`\uFEFF`) for seamless Excel and ERP import across 6 distinct sections:
-     - Section 1: Production Order & Optimization Summary
-     - Section 2: Placed Parts Cut List (SKU, dimensions, coordinates, orientation)
-     - Section 3: Saw Cut Sequence & Operator Instructions (English & Spanish)
-     - Section 4: Usable Remnants Registered for Inventory
-     - Section 5: Algorithm Benchmark Comparative Evaluation
-     - Section 6: Naive Manual Baseline vs. Heuristic Optimization
-
----
-
-## 6. Implementation Status Matrix
-
-| Component / Feature | Status | Details |
-|---|---|---|
-| **Step 1: Input Sidebar** | **Fully Implemented** | Grade chip sync, multi-block config, machine profile badges, clearance checks, 1/16" snapping, and sample loader. |
-| **Step 2: Optimize & Benchmarks** | **Fully Implemented** | Dynamic registry (`/api/algorithms`), Run Optimization, Compare All, best-heuristic badge, and validation reporting. |
-| **Step 3: 3D Cutting Plan** | **Fully Implemented** | React-Three-Fiber light scene, skin trim shell, SKU colors, layer toggles, cut stepper, and glowing magenta contour highlights. |
-| **Fix A: Grade Synchronization** | **Fully Implemented** | Grade drives blocks, parts, and machine checks; "Advanced: mixed grades" toggle; input edits flag stale state. |
-| **Fix B: Waterjet Profiler (`saw-wj`)** | **Fully Implemented** | Non-guillotine 3D maximal-empty-box placement, stream kerf ($0.0625"$), throat clearance limit ($36.0"$), and contour cut steps. |
-| **Step 4: Execute & Track Dashboard** | **Fully Implemented** | Cost assumptions panel, naive baseline model, 4 KPI cards, 6 light-themed charts, planned vs actual tracking table, remnants table. |
-| **Multi-Section CSV Export** | **Fully Implemented** | Single multi-section CSV with UTF-8 BOM exporting all job summary, parts, cuts, remnants, comparisons, and baseline deltas. |
-| **Volume Reconciliation & Validation** | **Fully Implemented** | Pairwise collision-free verification and strict volume identity conservation tested on all algorithms. |
-| **Bilingual Toggle (EN / ES)** | **Fully Implemented** | English strings and complete Spanish catalogues with `[revisión]` placeholders switchable in header. |
-| **OR-Tools Block Assignment (ORT-ASSIGN)** | **Fully Implemented** | CP-SAT multi-block bin assignment, remnant prioritization, iterative verify loop with cardinality cuts. |
-| **OR-Tools Pattern Selection (ORT-PATTERN)** | **Fully Implemented** | Fixed-pool column generation, exact demand satisfaction, optional overproduction flag, de-duplicated and capped. |
-| **Auto (OR-Tools) Machine Selection** | **Fully Implemented** | Station selection dropdown with configurable objective (`lowest_cost`, `best_yield`, `lowest_time`), throat height check, capacity limits. |
-| **Comprehensive OR-Tools Benchmark Suite** | **Fully Implemented** | Evaluates Job #4821, 20 synthetic jobs, multi-grade jobs, and volume-vs-geometry challenge in `docs/BENCHMARK_ORTOOLS.md`. |
-| **Rush-Order Re-planning with Warm Start** | **Stubbed (Planned)** | Interface stubs provided in `backend/app/engine/ortools/stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
-| **Dynamic Column Generation (Gilmore-Gomory)**| **Stubbed (Planned)** | Interface stubs provided in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
-| **Multi-Job Machine Scheduling** | **Stubbed (Planned)** | Disjunctive scheduling stubs in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
-| **SyteLine ERP Integration** | **Stubbed** | Interface stubs provided in `backend/app/api/stubs.py`. |
-| **ML Remnant Usability Scoring** | **Stubbed** | Rule-based volume scoring active for demo; ML stubs in `stubs.py`. |
-
----
-
-## 7. Testing & Verification
-
-Run the full pytest suite (51 passing test cases):
-```bash
-pytest backend/tests
-```
-
-Build the frontend production bundle:
-```bash
-cd frontend
-npm run build
-```
+### Spacing & Radius Scale
+- **4px Base Scale**: `4px`, `8px`, `12px`, `16px`, `20px` (card inner padding), `24px` (page padding & section gap), `32px`, `48px`.
+- **Radius**: `14px` (`rounded-card`) on cards, `10px` (`rounded-control`) on inputs and buttons.
