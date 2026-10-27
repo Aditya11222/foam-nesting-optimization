@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
 import type {
@@ -13,7 +13,17 @@ import type {
   SavedJob,
   RemnantInventoryItem,
   ActivityLogItem,
+  OptimizationObjective,
+  StrategyRecommendationResult,
 } from './types';
+import {
+  recommendMachine,
+  recommendObjective,
+  recommendStrategy,
+  evaluateBestMeasuredStrategy,
+  validateScreen1Inputs,
+  ALGORITHM_DISPLAY_NAMES,
+} from './services/recommender';
 import {
   fetchGrades,
   fetchMachines,
@@ -40,6 +50,7 @@ import { CuttingPlanCard } from './components/CuttingPlanCard';
 import { ExecutiveSummaryCard } from './components/ExecutiveSummaryCard';
 import { DashboardStep4 } from './components/DashboardStep4';
 import { Step4Placeholder } from './components/HelperComponents';
+import { StickyActionBar } from './components/StickyActionBar';
 import { exportJobCSV } from './utils/csvExport';
 
 // Pages
@@ -175,6 +186,9 @@ export function App() {
   const [selectedGrade, setSelectedGrade] = useState<string>('HR-40');
   const [allowMixedGrades, setAllowMixedGrades] = useState<boolean>(false);
   const [selectedMachineId, setSelectedMachineId] = useState<string>('saw-g2');
+  const [isMachineAuto, setIsMachineAuto] = useState<boolean>(true);
+  const [objective, setObjective] = useState<OptimizationObjective>('balanced');
+  const [isObjectiveAuto, setIsObjectiveAuto] = useState<boolean>(true);
   const [machineObjective, setMachineObjective] = useState<'lowest_cost' | 'best_yield' | 'lowest_time'>('lowest_cost');
   const [skinTrim, setSkinTrim] = useState<number>(1.0);
   const [kerf, setKerf] = useState<number>(0.125);
@@ -187,6 +201,13 @@ export function App() {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [isStale, setIsStale] = useState<boolean>(false);
   const [is3DGenerated, setIs3DGenerated] = useState<boolean>(false);
+
+  // Strategy Recommender & Workflow States
+  const [isStrategyAuto, setIsStrategyAuto] = useState<boolean>(true);
+  const [strategyRec, setStrategyRec] = useState<StrategyRecommendationResult | null>(null);
+  const [runningAlgorithmName, setRunningAlgorithmName] = useState<string>('');
+  const [screen1Error, setScreen1Error] = useState<string | null>(null);
+  const lastAutoRunFingerprintRef = useRef<string>('');
 
   // Output States
   const [resultsByAlgo, setResultsByAlgo] = useState<Record<string, OptimizationResult>>({});
@@ -303,6 +324,7 @@ export function App() {
 
   const handleSelectMachine = (newMachineId: string) => {
     setSelectedMachineId(newMachineId);
+    setIsMachineAuto(false);
     const m = machines.find((mach) => mach.id === newMachineId);
     if (m) {
       setKerf(m.kerf);
@@ -315,11 +337,213 @@ export function App() {
     handleInputModified();
   };
 
+  const handleSelectObjective = (newObj: OptimizationObjective) => {
+    setObjective(newObj);
+    setIsObjectiveAuto(false);
+    const legacy =
+      newObj === 'maximize_yield'
+        ? 'best_yield'
+        : newObj === 'minimize_time'
+        ? 'lowest_time'
+        : 'lowest_cost';
+    setMachineObjective(legacy);
+    handleInputModified();
+  };
+
+  // Auto-recommend Machine and Objective when inputs mutate (if in Auto mode)
+  useEffect(() => {
+    if (machines.length === 0) return;
+
+    let activeObj = objective;
+    if (isObjectiveAuto) {
+      const currentM = machines.find((m) => m.id === selectedMachineId);
+      const objRec = recommendObjective(blocks, parts, skinTrim, selectedGrade, currentM);
+      activeObj = objRec.recommendedObjective;
+      setObjective(activeObj);
+      setMachineObjective(
+        activeObj === 'maximize_yield'
+          ? 'best_yield'
+          : activeObj === 'minimize_time'
+          ? 'lowest_time'
+          : 'lowest_cost'
+      );
+    }
+
+    if (isMachineAuto) {
+      const machRec = recommendMachine(machines, blocks, parts, skinTrim, activeObj, selectedGrade);
+      if (machRec.recommendedMachine && machRec.recommendedMachine.id !== selectedMachineId) {
+        setSelectedMachineId(machRec.recommendedMachine.id);
+        setKerf(machRec.recommendedMachine.kerf);
+      }
+    }
+  }, [blocks, parts, skinTrim, selectedGrade, isMachineAuto, isObjectiveAuto, machines]);
+
   // Flag input changes as stale
   const handleInputModified = () => {
     setIsStale(true);
     setIs3DGenerated(false);
+    setScreen1Error(null);
   };
+
+  // Merge duplicate blocks handler
+  const handleMergeBlocks = (targetIdx: number, sourceIdx: number) => {
+    setBlocks((prev) => {
+      if (!prev[targetIdx] || !prev[sourceIdx]) return prev;
+      const sourceQty = prev[sourceIdx].quantity;
+      const updated = prev.map((b, i) =>
+        i === targetIdx ? { ...b, quantity: b.quantity + sourceQty } : b
+      );
+      return updated.filter((_, i) => i !== sourceIdx);
+    });
+    handleInputModified();
+  };
+
+  // Screen 1: Validate and Continue to Step 2
+  const handleContinueToOptimization = () => {
+    const selectedM = machines.find((m) => m.id === selectedMachineId);
+    const val = validateScreen1Inputs(blocks, parts, skinTrim, selectedM);
+    if (!val.isValid) {
+      setScreen1Error(val.errorMessage || 'Invalid inputs. Please correct the highlighted issues.');
+      return;
+    }
+    setScreen1Error(null);
+    setActiveStep(2);
+  };
+
+  // Auto-run on Step 2 Arrival (or input mutation when on Step 2)
+  useEffect(() => {
+    if (activeStep !== 2) return;
+    if (machines.length === 0 || algorithms.length === 0) return;
+    if (blocks.length === 0 || parts.length === 0) return;
+
+    const activeMach = machines.find((m) => m.id === selectedMachineId);
+    const val = validateScreen1Inputs(blocks, parts, skinTrim, activeMach);
+    if (!val.isValid) return;
+
+    const currentFingerprint = `${selectedMachineId}|${objective}|${selectedGrade}|${skinTrim}|${kerf}|${JSON.stringify(blocks)}|${JSON.stringify(parts)}`;
+    if (currentFingerprint === lastAutoRunFingerprintRef.current && resultsByAlgo[selectedAlgorithmId]) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const executeAutoRun = async () => {
+      const ruleRec = recommendStrategy(blocks, parts, activeMach, objective);
+      const initialAlgoId = isStrategyAuto ? ruleRec.ruleStrategyId : selectedAlgorithmId;
+      if (isStrategyAuto && selectedAlgorithmId !== ruleRec.ruleStrategyId) {
+        setSelectedAlgorithmId(ruleRec.ruleStrategyId);
+      }
+
+      setStrategyRec({
+        ruleStrategyId: ruleRec.ruleStrategyId,
+        ruleStrategyName: ruleRec.ruleStrategyName,
+        ruleReason: ruleRec.ruleReason,
+        finalStrategyId: initialAlgoId,
+        finalStrategyName: ALGORITHM_DISPLAY_NAMES[initialAlgoId] || initialAlgoId,
+        isSwitchedFromRule: false,
+        wordingDisclaimer: 'Best among the tested heuristics for this input and objective. Not proven optimal.',
+      });
+
+      setIsOptimizing(true);
+      setRunningAlgorithmName(ALGORITHM_DISPLAY_NAMES[initialAlgoId] || initialAlgoId);
+      startTimer();
+      lastAutoRunFingerprintRef.current = currentFingerprint;
+
+      try {
+        const payload: OptimizationRequest = {
+          job_id: currentJobId,
+          customer: customerRef || undefined,
+          grade: selectedGrade,
+          machine_id: selectedMachineId,
+          machine_objective: machineObjective,
+          skin_trim_per_face: skinTrim,
+          kerf: kerf,
+          parts: parts,
+          available_blocks: blocks,
+          algorithm_id: initialAlgoId,
+          seed: 42,
+          time_budget_seconds: 10.0,
+        };
+
+        const initialResult = await optimizeJob(payload);
+        if (!isMounted) return;
+
+        setResultsByAlgo((prev) => ({
+          ...prev,
+          [initialAlgoId]: initialResult,
+        }));
+        setIsStale(false);
+        setIs3DGenerated(true);
+        const now = new Date().toISOString();
+        setLastOptimizedAt(now);
+
+        // Background comparative benchmark of all algorithms
+        try {
+          const compResults = await compareAlgorithms(payload);
+          if (!isMounted) return;
+
+          setComparisonResults(compResults);
+          setResultsByAlgo((prev) => {
+            const updated = { ...prev };
+            compResults.forEach((r) => {
+              updated[r.algorithm_id] = r;
+            });
+            return updated;
+          });
+
+          const evaluated = evaluateBestMeasuredStrategy(
+            compResults,
+            objective,
+            ruleRec.ruleStrategyId,
+            ruleRec.ruleReason
+          );
+
+          if (isStrategyAuto) {
+            if (evaluated.finalStrategyId !== initialAlgoId) {
+              setSelectedAlgorithmId(evaluated.finalStrategyId);
+            }
+            setStrategyRec(evaluated);
+          } else {
+            setStrategyRec({
+              ...evaluated,
+              finalStrategyId: initialAlgoId,
+              finalStrategyName: ALGORITHM_DISPLAY_NAMES[initialAlgoId] || initialAlgoId,
+              isSwitchedFromRule: false,
+              switchedNotice: undefined,
+            });
+          }
+        } catch (compErr) {
+          console.warn('Background comparative benchmark error:', compErr);
+        }
+      } catch (err: any) {
+        console.error('Auto-run optimization error:', err);
+      } finally {
+        if (isMounted) {
+          stopTimer();
+          setIsOptimizing(false);
+          setRunningAlgorithmName('');
+        }
+      }
+    };
+
+    executeAutoRun();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    activeStep,
+    blocks,
+    parts,
+    skinTrim,
+    kerf,
+    selectedGrade,
+    selectedMachineId,
+    objective,
+    isStrategyAuto,
+    machines,
+    algorithms,
+  ]);
 
   // Build current payload helper
   const buildPayload = (algoId: string): OptimizationRequest => ({
@@ -340,6 +564,8 @@ export function App() {
   // Action: Run Selected Algorithm
   const handleRunOptimization = async () => {
     setIsOptimizing(true);
+    const algoName = ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId;
+    setRunningAlgorithmName(algoName);
     startTimer();
     try {
       const payload = buildPayload(selectedAlgorithmId);
@@ -355,6 +581,26 @@ export function App() {
       setLastOptimizedAt(now);
       setActiveStep(2);
 
+      const activeMach = machines.find((m) => m.id === selectedMachineId);
+      const ruleRec = recommendStrategy(blocks, parts, activeMach, objective);
+      const evaluated = evaluateBestMeasuredStrategy(
+        [result, ...comparisonResults.filter((r) => r.algorithm_id !== selectedAlgorithmId)],
+        objective,
+        ruleRec.ruleStrategyId,
+        ruleRec.ruleReason
+      );
+      if (!isStrategyAuto) {
+        setStrategyRec({
+          ...evaluated,
+          finalStrategyId: selectedAlgorithmId,
+          finalStrategyName: algoName,
+          isSwitchedFromRule: false,
+          switchedNotice: undefined,
+        });
+      } else {
+        setStrategyRec(evaluated);
+      }
+
       // Log activity
       logActivity('run', `Optimized: ${jobName}`, currentJobId, jobName, result.net_utilization_pct);
       setActivityLog(getStorageData().activity);
@@ -363,12 +609,14 @@ export function App() {
     } finally {
       stopTimer();
       setIsOptimizing(false);
+      setRunningAlgorithmName('');
     }
   };
 
   // Action: Compare All Algorithms
   const handleCompareAll = async () => {
     setIsOptimizing(true);
+    setRunningAlgorithmName('Running Comparative Benchmark (All 6 Algorithms)...');
     startTimer();
     try {
       const payload = buildPayload(selectedAlgorithmId);
@@ -382,9 +630,26 @@ export function App() {
       });
       setResultsByAlgo(updatedMap);
 
-      const winner = results.find((r) => r.is_best);
-      if (winner) {
-        setSelectedAlgorithmId(winner.algorithm_id);
+      const activeMach = machines.find((m) => m.id === selectedMachineId);
+      const ruleRec = recommendStrategy(blocks, parts, activeMach, objective);
+      const evaluated = evaluateBestMeasuredStrategy(
+        results,
+        objective,
+        ruleRec.ruleStrategyId,
+        ruleRec.ruleReason
+      );
+
+      if (isStrategyAuto) {
+        setSelectedAlgorithmId(evaluated.finalStrategyId);
+        setStrategyRec(evaluated);
+      } else {
+        setStrategyRec({
+          ...evaluated,
+          finalStrategyId: selectedAlgorithmId,
+          finalStrategyName: ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId,
+          isSwitchedFromRule: false,
+          switchedNotice: undefined,
+        });
       }
 
       setIsStale(false);
@@ -394,6 +659,7 @@ export function App() {
       setActiveStep(2);
 
       // Log activity
+      const winner = results.find((r) => r.is_best);
       const bestYield = winner ? winner.net_utilization_pct : undefined;
       logActivity('run', `Compared all algorithms: ${jobName}`, currentJobId, jobName, bestYield);
       setActivityLog(getStorageData().activity);
@@ -402,15 +668,18 @@ export function App() {
     } finally {
       stopTimer();
       setIsOptimizing(false);
+      setRunningAlgorithmName('');
     }
   };
 
   const handleSelectAlgorithm = (id: string) => {
     setSelectedAlgorithmId(id);
+    setIsStrategyAuto(false);
   };
 
   const handleSelectResultFromTable = (algoId: string) => {
     setSelectedAlgorithmId(algoId);
+    setIsStrategyAuto(false);
   };
 
   // Load Sample Job #4821
@@ -425,6 +694,9 @@ export function App() {
     setCustomerRef('');
     setCreatedAt(new Date().toISOString());
     setLastOptimizedAt(undefined);
+    setIsStrategyAuto(true);
+    setScreen1Error(null);
+    lastAutoRunFingerprintRef.current = '';
     handleInputModified();
     navigateTo('/optimization');
   };
@@ -508,6 +780,11 @@ export function App() {
       kerf: kerf,
       machine_objective: machineObjective,
       allow_mixed_grades: allowMixedGrades,
+      is_machine_auto: isMachineAuto,
+      is_objective_auto: isObjectiveAuto,
+      is_strategy_auto: isStrategyAuto,
+      objective: objective,
+      strategy_rec: strategyRec || undefined,
       created_at: createdAt,
       updated_at: new Date().toISOString(),
       last_optimized_at: lastOptimizedAt,
@@ -540,9 +817,19 @@ export function App() {
     setKerf(job.kerf);
     setMachineObjective(job.machine_objective || 'lowest_cost');
     setAllowMixedGrades(job.allow_mixed_grades || false);
+    setIsMachineAuto(job.is_machine_auto ?? true);
+    setIsObjectiveAuto(job.is_objective_auto ?? true);
+    setIsStrategyAuto(job.is_strategy_auto ?? true);
+    setObjective(job.objective || 'balanced');
+    if (job.strategy_rec) {
+      setStrategyRec(job.strategy_rec);
+    } else {
+      setStrategyRec(null);
+    }
     setCreatedAt(job.created_at);
     setLastOptimizedAt(job.last_optimized_at);
     setIsStale(job.status === 'Stale');
+    lastAutoRunFingerprintRef.current = '';
 
     if (job.latest_result) {
       setResultsByAlgo({ [job.algorithm_id]: job.latest_result });
@@ -573,6 +860,10 @@ export function App() {
     setComparisonResults([]);
     setIsStale(false);
     setIs3DGenerated(false);
+    setIsStrategyAuto(true);
+    setStrategyRec(null);
+    setScreen1Error(null);
+    lastAutoRunFingerprintRef.current = '';
     setActiveStep(1);
     navigateTo('/optimization');
   };
@@ -667,6 +958,10 @@ export function App() {
     setComparisonResults([]);
     setIsStale(false);
     setIs3DGenerated(false);
+    setIsStrategyAuto(true);
+    setStrategyRec(null);
+    setScreen1Error(null);
+    lastAutoRunFingerprintRef.current = '';
   };
 
   const currentResult: OptimizationResult | null = resultsByAlgo[selectedAlgorithmId] || null;
@@ -675,6 +970,16 @@ export function App() {
 
   // Workflow step click handler
   const handleStepClick = (stepId: number) => {
+    if (stepId > 1) {
+      const selectedM = machines.find((m) => m.id === selectedMachineId);
+      const val = validateScreen1Inputs(blocks, parts, skinTrim, selectedM);
+      if (!val.isValid) {
+        setScreen1Error(val.errorMessage || 'Invalid inputs. Please correct before proceeding.');
+        setActiveStep(1);
+        return;
+      }
+    }
+    setScreen1Error(null);
     setActiveStep(stepId);
     if (stepId === 3 && currentResult) {
       setIs3DGenerated(true);
@@ -780,14 +1085,15 @@ export function App() {
             />
 
             {/* Main View Area */}
-            <main className="flex-1 p-4 lg:p-6">
+            <main className="flex-1 p-4 lg:p-6 pb-20">
               {activeStep === 1 ? (
                 /* Step 1: Clean Centered Card Form */
                 <SidebarInputs
                   mode="card"
                   customerRef={customerRef}
                   onChangeCustomerRef={setCustomerRef}
-                  onContinueToOptimization={() => setActiveStep(2)}
+                  onContinueToOptimization={handleContinueToOptimization}
+                  validationError={screen1Error}
                   grades={grades}
                   selectedGrade={selectedGrade}
                   onSelectGrade={handleSelectGrade}
@@ -796,6 +1102,12 @@ export function App() {
                   machines={machines}
                   selectedMachineId={selectedMachineId}
                   onSelectMachine={handleSelectMachine}
+                  isMachineAuto={isMachineAuto}
+                  onToggleMachineAuto={setIsMachineAuto}
+                  objective={objective}
+                  onSelectObjective={handleSelectObjective}
+                  isObjectiveAuto={isObjectiveAuto}
+                  onToggleObjectiveAuto={setIsObjectiveAuto}
                   machineObjective={machineObjective}
                   onSelectMachineObjective={setMachineObjective}
                   skinTrim={skinTrim}
@@ -806,6 +1118,7 @@ export function App() {
                   onAddBlock={handleAddBlock}
                   onRemoveBlock={handleRemoveBlock}
                   onUpdateBlock={handleUpdateBlock}
+                  onMergeBlocks={handleMergeBlocks}
                   parts={parts}
                   onAddPart={handleAddPart}
                   onRemovePart={handleRemovePart}
@@ -832,11 +1145,21 @@ export function App() {
                         currentResult={currentResult}
                         comparisonResults={comparisonResults}
                         onSelectResultFromTable={handleSelectResultFromTable}
+                        isStrategyAuto={isStrategyAuto}
+                        onToggleStrategyAuto={setIsStrategyAuto}
+                        strategyRec={strategyRec}
+                        onRestoreRecommendedStrategy={() => {
+                          setIsStrategyAuto(true);
+                          if (strategyRec?.finalStrategyId) {
+                            setSelectedAlgorithmId(strategyRec.finalStrategyId);
+                          }
+                        }}
+                        runningAlgorithmName={runningAlgorithmName}
                       />
                     </div>
 
                     {/* Center Card: Cutting Plan & Visualization (40% width) */}
-                    <div className="lg:col-span-4 flex flex-col">
+                    <div className={`lg:col-span-4 flex flex-col ${activeStep === 3 ? 'ring-2 ring-emerald-500 rounded-xl shadow-md transition-all duration-300' : ''}`}>
                       <CuttingPlanCard
                         currentResult={currentResult}
                         selectedMachine={selectedMachine}
@@ -881,6 +1204,43 @@ export function App() {
                 </div>
               )}
             </main>
+
+            {/* 1.7 Sticky Action Bar at the bottom of Screen 2 and Screen 3 */}
+            {activeStep === 2 ? (
+              <StickyActionBar
+                mode="step2"
+                currentResult={currentResult}
+                isOptimizing={isOptimizing}
+                isStale={isStale}
+                algorithmName={selectedAlgorithm?.name}
+                onGenerate3DPlan={() => {
+                  setIs3DGenerated(true);
+                  setActiveStep(3);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onBackToInputs={() => {
+                  setActiveStep(1);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            ) : activeStep === 3 ? (
+              <StickyActionBar
+                mode="step3"
+                currentResult={currentResult}
+                isOptimizing={isOptimizing}
+                isStale={isStale}
+                algorithmName={selectedAlgorithm?.name}
+                onGenerate3DPlan={() => {
+                  setActiveStep(4);
+                  const el = document.getElementById('step4-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                onBackToInputs={() => {
+                  setActiveStep(2);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            ) : null}
           </div>
         )}
       </div>

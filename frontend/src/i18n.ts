@@ -1,4 +1,4 @@
-﻿import i18n from 'i18next';
+import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 const resources = {
@@ -172,7 +172,43 @@ const resources = {
       report_cost: "Cost Component Breakdown",
       report_remnants: "Remnant Manifest",
       print_pdf: "Print / Save PDF",
-      no_result_report_disabled: "Reports disabled: Run optimization on the active job or pick a saved job with valid results."
+      no_result_report_disabled: "Reports disabled: Run optimization on the active job or pick a saved job with valid results.",
+
+      // Recommender & Guided Flow (Screen 1 - 3)
+      why_this_machine: "Why this machine",
+      why_not_others: "Why not others",
+      auto_recommended: "Auto (Recommended)",
+      manual_selection: "Manual Selection",
+      use_recommended_machine: "Use recommended machine",
+      usable_dimensions: "Usable Dimensions",
+      precision_grid_warning: "Dimension does not align with 1/16\" (0.0625\") precision grid.",
+      throat_clearance_warning: "Block usable height exceeds selected machine max cut height.",
+      duplicate_blocks_detected: "Duplicate Block Rows Detected",
+      merge_quantities: "Merge Quantities",
+      estimated_min_blocks: "Estimated minimum blocks needed: {{min}}, available: {{avail}}",
+      stock_sufficiency_warning: "Available blocks may be insufficient for demanded volume",
+      priority_objective: "Optimization Priority Objective",
+      obj_balanced: "Balanced (Yield, Cost & Speed)",
+      obj_maximize_yield: "Maximize Yield (Lowest Scrap)",
+      obj_minimize_cost: "Minimize Cost ($/part)",
+      obj_minimize_time: "Minimize Time (Fastest Cuts)",
+      why_this_objective: "Why this objective",
+      use_recommended_objective: "Use recommended objective",
+      why_this_strategy: "Why this strategy",
+      rule_prior_label: "Rule Heuristic Prior",
+      measured_evidence_label: "Measured Benchmark Evidence",
+      wording_disclaimer: "Best among the tested heuristics for this input and objective. Not proven optimal.",
+      use_recommended_strategy: "Use recommended",
+      auto_strategy_recommended: "Auto (Recommended)",
+      continue_to_step2: "Continue to Algorithm Selection & Placement",
+      generate_3d_action: "Generate 3D Cutting Plan & Visualization",
+      back_to_inputs: "Back to inputs",
+      proceed_to_step4: "Proceed to Results & Execution",
+      back_to_algorithm: "Back to algorithm",
+      sticky_tooltip_optimizing: "Optimization solver is currently solving heuristics. Please wait...",
+      sticky_tooltip_stale: "Inputs have been modified since the last solve. Re-run optimization to refresh results.",
+      sticky_tooltip_no_result: "No optimization result available yet. Run a strategy to compute a cutting plan.",
+      sticky_tooltip_invalid: "Current solution failed geometric validation. Please check part dimensions."
     }
   },
   es: {
@@ -345,7 +381,43 @@ const resources = {
       report_cost: "Desglose de Costos [revisión]",
       report_remnants: "Manifiesto de Remanentes [revisión]",
       print_pdf: "Imprimir / Guardar PDF [revisión]",
-      no_result_report_disabled: "Reportes deshabilitados: ejecute la optimización en el trabajo activo o seleccione un trabajo guardado con resultados válidos. [revisión]"
+      no_result_report_disabled: "Reportes deshabilitados: ejecute la optimización en el trabajo activo o seleccione un trabajo guardado con resultados válidos. [revisión]",
+
+      // Recommender & Guided Flow (Screen 1 - 3) - Spanish placeholders (needs review)
+      why_this_machine: "Por qué esta máquina [revisión]",
+      why_not_others: "Por qué otras no [revisión]",
+      auto_recommended: "Automático (Recomendado) [revisión]",
+      manual_selection: "Selección manual [revisión]",
+      use_recommended_machine: "Usar máquina recomendada [revisión]",
+      usable_dimensions: "Dimensiones útiles [revisión]",
+      precision_grid_warning: "La dimensión no se alinea con la cuadrícula de precisión de 1/16\" (0.0625\"). [revisión]",
+      throat_clearance_warning: "La altura útil del bloque excede la altura máxima de corte de la máquina seleccionada. [revisión]",
+      duplicate_blocks_detected: "Filas de bloques duplicadas detectadas [revisión]",
+      merge_quantities: "Combinar cantidades [revisión]",
+      estimated_min_blocks: "Mínimo estimado de bloques necesarios: {{min}}, disponibles: {{avail}} [revisión]",
+      stock_sufficiency_warning: "Los bloques disponibles pueden ser insuficientes para el volumen demandado [revisión]",
+      priority_objective: "Objetivo de Prioridad de Optimización [revisión]",
+      obj_balanced: "Equilibrado (Rendimiento, Costo y Velocidad) [revisión]",
+      obj_maximize_yield: "Maximizar Rendimiento (Menor Desperdicio) [revisión]",
+      obj_minimize_cost: "Minimizar Costo ($/pieza) [revisión]",
+      obj_minimize_time: "Minimizar Tiempo (Cortes más rápidos) [revisión]",
+      why_this_objective: "Por qué este objetivo [revisión]",
+      use_recommended_objective: "Usar objetivo recomendado [revisión]",
+      why_this_strategy: "Por qué esta estrategia [revisión]",
+      rule_prior_label: "Heurística de regla previa [revisión]",
+      measured_evidence_label: "Evidencia medida de benchmark [revisión]",
+      wording_disclaimer: "Mejor entre las heurísticas probadas para esta entrada y objetivo. No probado como óptimo. [revisión]",
+      use_recommended_strategy: "Usar recomendada [revisión]",
+      auto_strategy_recommended: "Automático (Recomendado) [revisión]",
+      continue_to_step2: "Continuar a Selección y Ubicación de Algoritmos [revisión]",
+      generate_3d_action: "Generar Plan de Corte 3D y Visualización [revisión]",
+      back_to_inputs: "Volver a entradas [revisión]",
+      proceed_to_step4: "Continuar a Resultados y Ejecución [revisión]",
+      back_to_algorithm: "Volver al algoritmo [revisión]",
+      sticky_tooltip_optimizing: "El solver de optimización está resolviendo heurísticas. Por favor espere... [revisión]",
+      sticky_tooltip_stale: "Las entradas se modificaron desde la última solución. Reejecute la optimización. [revisión]",
+      sticky_tooltip_no_result: "Aún no hay resultados de optimización. Ejecute una estrategia para calcular el plan. [revisión]",
+      sticky_tooltip_invalid: "La solución actual falló la validación geométrica. Verifique las dimensiones. [revisión]"
     }
   }
 };

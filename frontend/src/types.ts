@@ -20,6 +20,73 @@ export interface MachineProfile {
   hourly_rate?: number;
   feed_rate_ipm?: number;
   available_hours_limit?: number;
+  support_level?: 'fully_supported' | 'basic_heuristic';
+}
+
+export type OptimizationObjective = 'maximize_yield' | 'minimize_cost' | 'minimize_time' | 'balanced';
+
+export interface MachineEvaluation {
+  machine: MachineProfile;
+  isEligible: boolean;
+  rejectReason?: string;
+  score: number;
+  metrics: {
+    estimatedSawTimeMin: number;
+    estimatedCostDollars: number;
+    estimatedYieldPct: number;
+    kerf: number;
+    feedRate: number;
+  };
+}
+
+export interface MachineRecommendationResult {
+  recommendedMachine: MachineProfile | null;
+  evaluations: Record<string, MachineEvaluation>;
+  reasonSummary: string;
+  rejectedReasons: Record<string, string>;
+  hasNoEligible: boolean;
+  failureMessage?: string;
+}
+
+export interface ObjectiveRecommendationResult {
+  recommendedObjective: OptimizationObjective;
+  reason: string;
+  metrics: {
+    materialCostRatio: number;
+    estimatedTotalCuts: number;
+    rawMaterialCost: number;
+    estimatedSawCost: number;
+  };
+}
+
+export interface StockSufficiencyResult {
+  totalRequiredPartVolume: number;
+  totalUsableBlockVolume: number;
+  kerfAllowanceVolume: number;
+  estimatedMinBlocksNeeded: number;
+  availableBlocksCount: number;
+  isSufficient: boolean;
+  warningMessage?: string;
+}
+
+export interface Screen1ValidationResult {
+  isValid: boolean;
+  errorMessage?: string;
+  field?: 'blocks' | 'parts' | 'machine' | 'general';
+}
+
+export interface StrategyRecommendationResult {
+  ruleStrategyId: string;
+  ruleStrategyName: string;
+  ruleReason: string;
+  finalStrategyId: string;
+  finalStrategyName: string;
+  measuredEvidence?: string;
+  isSwitchedFromRule: boolean;
+  switchedNotice?: string;
+  wordingDisclaimer: string;
+  fallbackNotice?: string;
+  hasUnplacedParts?: boolean;
 }
 
 export interface AlgorithmInfo {
@@ -245,6 +312,13 @@ export interface SavedJob {
   kerf: number;
   machine_objective: 'lowest_cost' | 'best_yield' | 'lowest_time';
   allow_mixed_grades: boolean;
+  is_machine_auto?: boolean;
+  is_objective_auto?: boolean;
+  is_strategy_auto?: boolean;
+  objective?: OptimizationObjective;
+  machine_reason?: string;
+  objective_reason?: string;
+  strategy_rec?: StrategyRecommendationResult;
   created_at: string;
   updated_at: string;
   last_optimized_at?: string;

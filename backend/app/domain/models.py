@@ -38,6 +38,7 @@ class MachineProfile(BaseModel):
     hourly_rate: float = Field(default=65.0, description="Operating rate in $/hr")
     feed_rate_ipm: float = Field(default=100.0, description="Cutting speed in inches per min")
     available_hours_limit: Optional[float] = Field(default=None, description="Available machine capacity in hours")
+    support_level: Optional[str] = Field(default="fully_supported", description="Engine support level: fully_supported or basic_heuristic")
 
     @field_validator("max_cut_height", "kerf")
     @classmethod

@@ -1,35 +1,134 @@
 [
   {
     "id": "saw-g1",
-    "name": "Saw Station 1 \u2014 Horizontal Guillotine",
+    "name": "Saw Station 1 — Horizontal Guillotine",
     "cut_type": "guillotine",
     "max_cut_height": 48.0,
     "kerf": 0.125,
     "automation": "CNC",
     "preferred_direction": "X",
     "hourly_rate": 60.0,
-    "feed_rate_ipm": 120.0
+    "feed_rate_ipm": 120.0,
+    "support_level": "fully_supported"
   },
   {
     "id": "saw-g2",
-    "name": "Saw Station 2 \u2014 Vertical Slicer",
+    "name": "Saw Station 2 — Vertical Slicer",
     "cut_type": "guillotine",
     "max_cut_height": 52.0,
     "kerf": 0.125,
     "automation": "rotating",
     "preferred_direction": "Z",
     "hourly_rate": 50.0,
-    "feed_rate_ipm": 90.0
+    "feed_rate_ipm": 90.0,
+    "support_level": "fully_supported"
+  },
+  {
+    "id": "saw-vert-man",
+    "name": "Vertical Band Saw (Manual)",
+    "cut_type": "guillotine",
+    "max_cut_height": 40.0,
+    "kerf": 0.125,
+    "automation": "manual",
+    "preferred_direction": "Z",
+    "hourly_rate": 40.0,
+    "feed_rate_ipm": 50.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-vert-cnc",
+    "name": "Vertical Straight Saw (CNC)",
+    "cut_type": "guillotine",
+    "max_cut_height": 54.0,
+    "kerf": 0.125,
+    "automation": "CNC",
+    "preferred_direction": "Z",
+    "hourly_rate": 70.0,
+    "feed_rate_ipm": 130.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-horiz-man",
+    "name": "Horizontal Slab Saw (Manual)",
+    "cut_type": "guillotine",
+    "max_cut_height": 42.0,
+    "kerf": 0.125,
+    "automation": "manual",
+    "preferred_direction": "X",
+    "hourly_rate": 42.0,
+    "feed_rate_ipm": 60.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-guill-man",
+    "name": "Guillotine Block Saw (Manual)",
+    "cut_type": "guillotine",
+    "max_cut_height": 44.0,
+    "kerf": 0.1875,
+    "automation": "manual",
+    "preferred_direction": "X",
+    "hourly_rate": 38.0,
+    "feed_rate_ipm": 45.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-guill-rot",
+    "name": "Guillotine Saw (Rotating Table)",
+    "cut_type": "guillotine",
+    "max_cut_height": 50.0,
+    "kerf": 0.125,
+    "automation": "rotating",
+    "preferred_direction": "Z",
+    "hourly_rate": 55.0,
+    "feed_rate_ipm": 85.0,
+    "support_level": "basic_heuristic"
   },
   {
     "id": "saw-wj",
-    "name": "Saw Station 3 \u2014 Waterjet Profiler (CNC Contour)",
+    "name": "Saw Station 3 — Waterjet Profiler (CNC Contour)",
     "cut_type": "free",
     "max_cut_height": 36.0,
     "kerf": 0.0625,
     "automation": "CNC",
     "preferred_direction": "X",
     "hourly_rate": 95.0,
-    "feed_rate_ipm": 45.0
+    "feed_rate_ipm": 45.0,
+    "support_level": "fully_supported"
+  },
+  {
+    "id": "saw-wire-cnc",
+    "name": "Fast-Wire Contour Cutter (CNC)",
+    "cut_type": "free",
+    "max_cut_height": 48.0,
+    "kerf": 0.0625,
+    "automation": "CNC",
+    "preferred_direction": "X",
+    "hourly_rate": 85.0,
+    "feed_rate_ipm": 140.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-wire-man",
+    "name": "Oscillating Wire Saw (Manual)",
+    "cut_type": "free",
+    "max_cut_height": 36.0,
+    "kerf": 0.0625,
+    "automation": "manual",
+    "preferred_direction": "X",
+    "hourly_rate": 48.0,
+    "feed_rate_ipm": 40.0,
+    "support_level": "basic_heuristic"
+  },
+  {
+    "id": "saw-cnc-rout",
+    "name": "3-Axis CNC Foam Contour Router",
+    "cut_type": "free",
+    "max_cut_height": 32.0,
+    "kerf": 0.25,
+    "automation": "CNC",
+    "preferred_direction": "X",
+    "hourly_rate": 90.0,
+    "feed_rate_ipm": 75.0,
+    "support_level": "basic_heuristic"
   }
 ]
