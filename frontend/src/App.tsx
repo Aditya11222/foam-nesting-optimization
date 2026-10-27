@@ -15,6 +15,7 @@ import type {
   ActivityLogItem,
   OptimizationObjective,
   StrategyRecommendationResult,
+  GCodeExportResponse,
 } from './types';
 import {
   recommendMachine,
@@ -30,6 +31,7 @@ import {
   fetchAlgorithms,
   optimizeJob,
   compareAlgorithms,
+  exportGCode,
 } from './api';
 import {
   getStorageData,
@@ -39,7 +41,12 @@ import {
   addRemnants,
   logActivity,
   clearDemoStorage,
+  recordGCodeExportInStorage,
 } from './utils/storage';
+import {
+  computeGCodeButtonState,
+  generateJobGCodeClient,
+} from './services/gcode';
 import { TopNavbar } from './components/TopNavbar';
 import { IconRail } from './components/IconRail';
 import { JobHeader } from './components/JobHeader';
@@ -51,7 +58,9 @@ import { ExecutiveSummaryCard } from './components/ExecutiveSummaryCard';
 import { DashboardStep4 } from './components/DashboardStep4';
 import { Step4Placeholder } from './components/HelperComponents';
 import { StickyActionBar } from './components/StickyActionBar';
+import { GCodeModal } from './components/GCodeModal';
 import { exportJobCSV } from './utils/csvExport';
+import { FileCode } from 'lucide-react';
 
 // Pages
 import { DashboardPage } from './components/pages/DashboardPage';
@@ -208,6 +217,12 @@ export function App() {
   const [runningAlgorithmName, setRunningAlgorithmName] = useState<string>('');
   const [screen1Error, setScreen1Error] = useState<string | null>(null);
   const lastAutoRunFingerprintRef = useRef<string>('');
+
+  // G-Code Export States
+  const [isGCodeModalOpen, setIsGCodeModalOpen] = useState<boolean>(false);
+  const [gcodeExportData, setGcodeExportData] = useState<GCodeExportResponse | null>(null);
+  const [isGeneratingGCode, setIsGeneratingGCode] = useState<boolean>(false);
+
 
   // Output States
   const [resultsByAlgo, setResultsByAlgo] = useState<Record<string, OptimizationResult>>({});
@@ -968,6 +983,53 @@ export function App() {
   const selectedMachine = machines.find((m) => m.id === selectedMachineId);
   const selectedAlgorithm = algorithms.find((a) => a.id === selectedAlgorithmId);
 
+  // Compute G-Code export capability state & reasons
+  const gcodeButtonState = computeGCodeButtonState(
+    currentResult,
+    isOptimizing || isGeneratingGCode,
+    isStale,
+    selectedMachine
+  );
+
+  const handleOpenGCode = async () => {
+    if (!currentResult || !gcodeButtonState.isEnabled) return;
+    setIsGeneratingGCode(true);
+    try {
+      const res = await exportGCode({
+        result: currentResult,
+        machine_id: selectedMachine?.id,
+        job_name: jobName,
+        customer_ref: customerRef,
+        allow_unplaced_export: true,
+      });
+      setGcodeExportData(res);
+      setIsGCodeModalOpen(true);
+    } catch (apiErr) {
+      console.warn('Backend G-code API failed, fallback to client generator:', apiErr);
+      try {
+        const clientRes = generateJobGCodeClient(
+          currentResult,
+          selectedMachine,
+          jobName,
+          customerRef
+        );
+        setGcodeExportData(clientRes);
+        setIsGCodeModalOpen(true);
+      } catch (clientErr: any) {
+        alert(clientErr?.message || 'Failed to generate G-code program.');
+      }
+    } finally {
+      setIsGeneratingGCode(false);
+    }
+  };
+
+  const handleRecordGCodeExport = (filenames: string[]) => {
+    if (selectedMachine) {
+      const updated = recordGCodeExportInStorage(currentJobId, selectedMachine.name, filenames);
+      setSavedJobs(updated);
+    }
+  };
+
   // Workflow step click handler
   const handleStepClick = (stepId: number) => {
     if (stepId > 1) {
@@ -1074,6 +1136,8 @@ export function App() {
               onSaveJob={handleSaveJob}
               onExportCSV={handleExportCSV}
               isSaved={isSaved}
+              onGenerateGCode={handleOpenGCode}
+              gcodeButtonState={gcodeButtonState}
             />
 
             {/* 1.4 Chevron Stepper */}
@@ -1166,6 +1230,8 @@ export function App() {
                         isStale={isStale}
                         is3DGenerated={is3DGenerated}
                         onGenerate3DPlan={() => setIs3DGenerated(true)}
+                        onGenerateGCode={handleOpenGCode}
+                        gcodeButtonState={gcodeButtonState}
                       />
                     </div>
 
@@ -1244,6 +1310,37 @@ export function App() {
           </div>
         )}
       </div>
+
+      {/* CNC G-Code Export and Safety Preview Modal */}
+      <GCodeModal
+        isOpen={isGCodeModalOpen}
+        onClose={() => setIsGCodeModalOpen(false)}
+        gcodeData={gcodeExportData}
+        selectedMachine={selectedMachine}
+        jobName={jobName}
+        unplacedCount={
+          currentResult
+            ? currentResult.unplaced_parts?.length ||
+              Math.max(0, currentResult.total_parts_demanded - currentResult.total_parts_placed)
+            : 0
+        }
+        onRecordExport={handleRecordGCodeExport}
+      />
+
+      {/* G-Code Generation Progress Overlay */}
+      {isGeneratingGCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 flex flex-col items-center space-y-3 max-w-sm text-center">
+            <div className="p-3 rounded-full bg-amber-50 text-amber-600 border border-amber-200 animate-pulse">
+              <FileCode className="w-8 h-8" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">Generating CNC G-Code Program</h3>
+            <p className="text-xs text-slate-500">
+              Formulating RS-274 cutting sequences and executing physical envelope path verification...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

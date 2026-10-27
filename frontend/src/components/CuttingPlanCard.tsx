@@ -7,6 +7,7 @@ import {
   Pause,
   Scissors,
   Box,
+  FileCode,
 } from 'lucide-react';
 import type { OptimizationResult, MachineProfile, BlockLayout, CutStep } from '../types';
 import { ThreeBlockView } from './ThreeBlockView';
@@ -17,6 +18,8 @@ interface CuttingPlanCardProps {
   isStale: boolean;
   is3DGenerated: boolean;
   onGenerate3DPlan: () => void;
+  onGenerateGCode?: () => void;
+  gcodeButtonState?: { isEnabled: boolean; reason?: string };
 }
 
 export const CuttingPlanCard: React.FC<CuttingPlanCardProps> = ({
@@ -25,6 +28,8 @@ export const CuttingPlanCard: React.FC<CuttingPlanCardProps> = ({
   isStale: _isStale,
   is3DGenerated: _is3DGenerated,
   onGenerate3DPlan: _onGenerate3DPlan,
+  onGenerateGCode,
+  gcodeButtonState = { isEnabled: false },
 }) => {
 
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number>(0);
@@ -247,6 +252,26 @@ export const CuttingPlanCard: React.FC<CuttingPlanCardProps> = ({
                     title="Next Cut"
                   >
                     <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  {/* G-Code Export Button in Screen 3 Toolbar */}
+                  <button
+                    type="button"
+                    onClick={gcodeButtonState.isEnabled ? onGenerateGCode : undefined}
+                    disabled={!gcodeButtonState.isEnabled}
+                    className={`ml-1 px-2 py-1 rounded text-xs font-bold flex items-center space-x-1 border shadow-2xs transition ${
+                      gcodeButtonState.isEnabled
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer'
+                        : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-50'
+                    }`}
+                    title={
+                      gcodeButtonState.isEnabled
+                        ? 'Generate CNC G-Code program for this cut sequence'
+                        : gcodeButtonState.reason || 'Generate G-Code'
+                    }
+                  >
+                    <FileCode className={`w-3.5 h-3.5 ${gcodeButtonState.isEnabled ? 'text-amber-600' : 'text-slate-400'}`} />
+                    <span className="text-[10px]">G-Code</span>
                   </button>
                 </div>
               </div>

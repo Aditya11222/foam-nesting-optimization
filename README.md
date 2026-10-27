@@ -165,9 +165,44 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
      - Section 5: Algorithm Benchmark Comparative Evaluation
      - Section 6: Naive Manual Baseline vs. Heuristic Optimization
 
+7. **Demo-Grade CNC G-Code Export (RS-274)**:
+   - Exports deterministic RS-274 / ISO 6983 G-code programs for CNC horizontal/vertical bandsaws, blade saws, wire cutters, and abrasive waterjets.
+   - Snaps all coordinates to the $1/16''$ ($0.0625''$) manufacturing grid formatted to 4 decimal places ($X0, Y0, Z0$ at bottom-front-left raw block corner).
+   - Automated pre-flight path simulation verifying toolpath bounds, travel limits, non-negative Z plunges, and feed rates.
+   - Built-in modal viewer with line-numbered monospace preview, search filtering, cut step jumping, and clipboard copy.
+   - Zero-dependency client-side binary PKZip encoder exporting multi-block zip archives or individual `.nc` files.
+
 ---
 
-## 6. Implementation Status Matrix
+## 6. G-Code Export: Limitations & Safety Disclaimer
+
+> [!CAUTION]
+> **DEMO OUTPUT: NOT VALIDATED ON A REAL MACHINE. REVIEW AND DRY-RUN BEFORE USE.**
+> 
+> The G-code export post-processor is an experimental demonstration feature. It has **NOT** been certified or dry-run on physical industrial saws, CNC waterjets, or machine controllers. Coordinates must be rigorously inspected, zero-offsets calibrated, and an air-cut / dry-run performed before touching material.
+
+### Implemented vs. Placeholder Matrix
+
+| Feature / Capability | Status | Notes |
+|---|:---:|---|
+| **Verbatim Header Disclaimer** | **Implemented** | Mandatory header in every exported `.nc` file and UI confirmation checkbox. |
+| **Standard RS-274 G-Code** | **Implemented** | Inch mode (`G20`), absolute (`G90`), XY plane (`G17`), feed/min (`G94`), program end (`M30`). |
+| **1/16" Grid Snapping** | **Implemented** | Deterministic coordinate snapping to $0.0625''$ printed to 4 decimal places. |
+| **Guillotine Through-Slicing** | **Implemented** | Rapid approach, linear slicing passes ($Z, X, Y$), safe retracts above material. |
+| **Waterjet / Contour Loops** | **Implemented** | Perimeter offset loops with stream engage (`M08`) and shutoff (`M09`). |
+| **Pre-Flight Path Check** | **Implemented** | Enforces bounding box bounds, stroke limits, non-negative $Z$, positive feedrate. |
+| **Multi-Block ZIP Archive** | **Implemented** | In-browser binary PKZip encoder without external library dependencies. |
+| **Machine Gating** | **Implemented** | Automated saws enabled; manual saws disabled with explanatory tooltip. |
+| **Controller-Specific Dialects** | *Placeholder* | Siemens, Fanuc macro-B, and Heidenhain specific canned cycles. |
+| **Dynamic Blade Deflection** | *Placeholder* | Real-time feed reduction based on foam grade density and blade tension. |
+| **Vacuum Zone Actuation** | *Placeholder* | Automated M-code triggering for compartmentalized vacuum hold-down tables. |
+| **Direct DNC Upload** | *Placeholder* | Network socket / serial transmission directly to shop-floor CNC controllers. |
+
+*See [docs/GCODE_EXPORT.md](file:///docs/GCODE_EXPORT.md) for full technical documentation.*
+
+---
+
+## 7. Implementation Status Matrix
 
 | Component / Feature | Status | Details |
 |---|---|---|
@@ -178,6 +213,8 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
 | **Fix B: Waterjet Profiler (`saw-wj`)** | **Fully Implemented** | Non-guillotine 3D maximal-empty-box placement, stream kerf ($0.0625"$), throat clearance limit ($36.0"$), and contour cut steps. |
 | **Step 4: Execute & Track Dashboard** | **Fully Implemented** | Cost assumptions panel, naive baseline model, 4 KPI cards, 6 light-themed charts, planned vs actual tracking table, remnants table. |
 | **Multi-Section CSV Export** | **Fully Implemented** | Single multi-section CSV with UTF-8 BOM exporting all job summary, parts, cuts, remnants, comparisons, and baseline deltas. |
+| **Demo-Grade G-Code Export** | **Fully Implemented** | RS-274 post-processor with pre-flight path simulation, preview modal, safety gating, `.nc` & `.zip` downloads. |
+| **Auto Recommender & Guided Flow** | **Fully Implemented** | Rule-based and benchmark evidence recommendations for machine, priority objective, and algorithm. |
 | **Volume Reconciliation & Validation** | **Fully Implemented** | Pairwise collision-free verification and strict volume identity conservation tested on all algorithms. |
 | **Bilingual Toggle (EN / ES)** | **Fully Implemented** | English strings and complete Spanish catalogues with `[revisión]` placeholders switchable in header. |
 | **OR-Tools Block Assignment (ORT-ASSIGN)** | **Fully Implemented** | CP-SAT multi-block bin assignment, remnant prioritization, iterative verify loop with cardinality cuts. |
@@ -192,11 +229,17 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
 
 ---
 
-## 7. Testing & Verification
+## 8. Testing & Verification
 
-Run the full pytest suite (51 passing test cases):
+Run the full pytest suite (66 passing test cases):
 ```bash
 pytest backend/tests
+```
+
+Run frontend unit tests:
+```bash
+cd frontend
+node --test --experimental-strip-types src/services/__tests__/recommender.test.ts src/components/__tests__/stickyActionBar.test.ts src/services/__tests__/gcode.test.ts
 ```
 
 Build the frontend production bundle:

@@ -9,6 +9,12 @@
     "preferred_direction": "X",
     "hourly_rate": 60.0,
     "feed_rate_ipm": 120.0,
+    "rapid_rate_ipm": 350.0,
+    "safe_z": 2.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "fully_supported"
   },
   {
@@ -21,6 +27,12 @@
     "preferred_direction": "Z",
     "hourly_rate": 50.0,
     "feed_rate_ipm": 90.0,
+    "rapid_rate_ipm": 300.0,
+    "safe_z": 2.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "fully_supported"
   },
   {
@@ -33,6 +45,12 @@
     "preferred_direction": "Z",
     "hourly_rate": 40.0,
     "feed_rate_ipm": 50.0,
+    "rapid_rate_ipm": 0.0,
+    "safe_z": 0.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": false,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -45,6 +63,12 @@
     "preferred_direction": "Z",
     "hourly_rate": 70.0,
     "feed_rate_ipm": 130.0,
+    "rapid_rate_ipm": 350.0,
+    "safe_z": 2.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -57,6 +81,12 @@
     "preferred_direction": "X",
     "hourly_rate": 42.0,
     "feed_rate_ipm": 60.0,
+    "rapid_rate_ipm": 0.0,
+    "safe_z": 0.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": false,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -69,6 +99,12 @@
     "preferred_direction": "X",
     "hourly_rate": 38.0,
     "feed_rate_ipm": 45.0,
+    "rapid_rate_ipm": 0.0,
+    "safe_z": 0.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": false,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -81,6 +117,12 @@
     "preferred_direction": "Z",
     "hourly_rate": 55.0,
     "feed_rate_ipm": 85.0,
+    "rapid_rate_ipm": 300.0,
+    "safe_z": 2.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -93,6 +135,12 @@
     "preferred_direction": "X",
     "hourly_rate": 95.0,
     "feed_rate_ipm": 45.0,
+    "rapid_rate_ipm": 250.0,
+    "safe_z": 1.5,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "fully_supported"
   },
   {
@@ -105,6 +153,12 @@
     "preferred_direction": "X",
     "hourly_rate": 85.0,
     "feed_rate_ipm": 140.0,
+    "rapid_rate_ipm": 400.0,
+    "safe_z": 1.5,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -117,6 +171,12 @@
     "preferred_direction": "X",
     "hourly_rate": 48.0,
     "feed_rate_ipm": 40.0,
+    "rapid_rate_ipm": 0.0,
+    "safe_z": 0.0,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": false,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   },
   {
@@ -129,6 +189,12 @@
     "preferred_direction": "X",
     "hourly_rate": 90.0,
     "feed_rate_ipm": 75.0,
+    "rapid_rate_ipm": 300.0,
+    "safe_z": 1.5,
+    "origin": "block_corner_front_left_bottom",
+    "gcode_supported": true,
+    "gcode_dialect": "generic_rs274",
+    "units": "inches",
     "support_level": "basic_heuristic"
   }
 ]

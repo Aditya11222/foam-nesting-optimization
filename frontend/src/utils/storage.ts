@@ -1,4 +1,4 @@
-﻿import type { SavedJob, RemnantInventoryItem, ActivityLogItem, BlockInput } from '../types';
+import type { SavedJob, RemnantInventoryItem, ActivityLogItem, BlockInput } from '../types';
 
 const STORAGE_KEY = 'tatras_nestpro_demo_v1';
 
@@ -189,3 +189,41 @@ export function clearDemoStorage(): void {
     console.warn('localStorage clear failed:', err);
   }
 }
+
+export function recordGCodeExportInStorage(jobId: string, machineName: string, filenames: string[]): SavedJob[] {
+  const data = getStorageData();
+  const existingIdx = data.jobs.findIndex((j) => j.job_id === jobId || j.id === jobId);
+  if (existingIdx < 0) return data.jobs;
+
+  const updatedJobs = data.jobs.map((j, i) => {
+    if (i === existingIdx) {
+      return {
+        ...j,
+        last_gcode_export: {
+          exported_at: new Date().toISOString(),
+          machine_name: machineName,
+          filenames,
+        },
+        updated_at: new Date().toISOString(),
+      };
+    }
+    return j;
+  });
+
+  const newActivity: ActivityLogItem = {
+    id: `act-${Date.now().toString().slice(-6)}`,
+    type: 'run',
+    title: `G-code exported: ${filenames.length} file(s) for ${machineName}`,
+    job_id: jobId,
+    timestamp: new Date().toISOString(),
+  };
+
+  saveStorageData({
+    ...data,
+    jobs: updatedJobs,
+    activity: [newActivity, ...data.activity].slice(0, 30),
+  });
+
+  return updatedJobs;
+}
+

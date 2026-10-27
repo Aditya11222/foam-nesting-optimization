@@ -208,7 +208,26 @@ const resources = {
       sticky_tooltip_optimizing: "Optimization solver is currently solving heuristics. Please wait...",
       sticky_tooltip_stale: "Inputs have been modified since the last solve. Re-run optimization to refresh results.",
       sticky_tooltip_no_result: "No optimization result available yet. Run a strategy to compute a cutting plan.",
-      sticky_tooltip_invalid: "Current solution failed geometric validation. Please check part dimensions."
+      sticky_tooltip_invalid: "Current solution failed geometric validation. Please check part dimensions.",
+      gcode_export_title: "CNC G-Code Program Export",
+      gcode_demo_badge: "DEMO POST-PROCESSOR — NOT VALIDATED ON PHYSICAL MACHINERY",
+      gcode_demo_disclaimer: "This G-code export is an experimental demonstration feature. It has NOT been certified or dry-run on physical industrial saws, CNC waterjets, or machine controllers. Coordinates must be rigorously inspected, zero-offsets calibrated, and an air-cut / dry-run performed before touching material.",
+      gcode_unplaced_warning: "Partial Job Warning: {{count}} demanded parts could not be placed. This G-code program will cut the placed items only.",
+      gcode_safety_ack_label: "Safety Acknowledgment: I understand this file must be reviewed and dry-run before use. I acknowledge that Tatras NestPro output is an unvalidated demonstration export and has not been tested on physical shop-floor equipment.",
+      gcode_download_single: "Download Block {{block}} (.nc)",
+      gcode_download_all: "Download All (.zip)",
+      gcode_tooltip_ready: "Generate demo-grade CNC G-code cutting program (RS-274)",
+      gcode_tooltip_manual: "{{machine}} is a manual saw: no G-code output",
+      gcode_tooltip_stale: "Results are stale — re-run optimization to update cutting sequence",
+      gcode_tooltip_no_result: "Run optimization to produce a cutting plan before generating G-code",
+      gcode_tooltip_optimizing: "Optimization in progress — please wait before generating G-code",
+      gcode_search_placeholder: "Filter G-code commands (e.g. G01, Step 2, Z42)...",
+      gcode_jump_to_step: "Jump to Cut Step...",
+      gcode_copied: "Copied!",
+      gcode_copy: "Copy",
+      gcode_sim_pass: "Sim Pass",
+      gcode_sim_fail: "Sim Fail",
+      gcode_exported_badge: "G-code exported {{date}}"
     }
   },
   es: {
@@ -417,7 +436,28 @@ const resources = {
       sticky_tooltip_optimizing: "El solver de optimización está resolviendo heurísticas. Por favor espere... [revisión]",
       sticky_tooltip_stale: "Las entradas se modificaron desde la última solución. Reejecute la optimización. [revisión]",
       sticky_tooltip_no_result: "Aún no hay resultados de optimización. Ejecute una estrategia para calcular el plan. [revisión]",
-      sticky_tooltip_invalid: "La solución actual falló la validación geométrica. Verifique las dimensiones. [revisión]"
+      sticky_tooltip_invalid: "La solución actual falló la validación geométrica. Verifique las dimensiones. [revisión]",
+
+      // G-Code Export (Spanish placeholders - NOTE: Safety-critical text requires certified SME review before production shop-floor use)
+      gcode_export_title: "Exportación de Programa G-Code CNC [revisión]",
+      gcode_demo_badge: "POST-PROCESADOR DE DEMO — NO VALIDADO EN MAQUINARIA FÍSICA [revisión]",
+      gcode_demo_disclaimer: "Esta exportación de código G es una función experimental de demostración. NO ha sido certificada ni probada en vacío en sierras industriales, chorros de agua CNC ni controladores reales. Las coordenadas deben inspeccionarse rigurosamente, calibrar los ceros de pieza y realizar un corte en vacío antes de procesar material. [revisión]",
+      gcode_unplaced_warning: "Advertencia de Trabajo Parcial: {{count}} piezas demandadas no pudieron ubicarse. Este programa G-code cortará únicamente las piezas ubicadas. [revisión]",
+      gcode_safety_ack_label: "Reconocimiento de Seguridad: Entiendo que este archivo debe revisarse y probarse en vacío antes de su uso. Reconozco que la salida de Tatras NestPro es una exportación de demostración no validada y no ha sido probada en equipos de taller físicos. [revisión]",
+      gcode_download_single: "Descargar Bloque {{block}} (.nc) [revisión]",
+      gcode_download_all: "Descargar Todos (.zip) [revisión]",
+      gcode_tooltip_ready: "Generar programa de corte G-code CNC de demostración (RS-274) [revisión]",
+      gcode_tooltip_manual: "{{machine}} es una sierra manual: sin salida G-code [revisión]",
+      gcode_tooltip_stale: "Los resultados están desactualizados: vuelva a ejecutar la optimización para actualizar la secuencia de corte [revisión]",
+      gcode_tooltip_no_result: "Ejecute la optimización para generar un plan de corte antes de exportar G-code [revisión]",
+      gcode_tooltip_optimizing: "Optimización en progreso: espere antes de generar código G [revisión]",
+      gcode_search_placeholder: "Filtrar comandos G-code (ej. G01, Paso 2, Z42)... [revisión]",
+      gcode_jump_to_step: "Saltar a paso de corte... [revisión]",
+      gcode_copied: "¡Copiado! [revisión]",
+      gcode_copy: "Copiar [revisión]",
+      gcode_sim_pass: "Sim Aprobada [revisión]",
+      gcode_sim_fail: "Sim Fallida [revisión]",
+      gcode_exported_badge: "G-code exportado {{date}} [revisión]"
     }
   }
 };

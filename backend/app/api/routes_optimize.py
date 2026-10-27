@@ -13,8 +13,11 @@ from ..domain.models import (
     OptimizationRequest,
     OptimizationResult,
     AlgorithmInfo,
-    MachineCutType
+    MachineCutType,
+    GCodeExportResponse,
+    GCodeGenerateApiRequest
 )
+from ..engine.gcode import generate_job_gcode, GCodeGenerationError
 from ..optimizer.registry import algorithm_registry, StrategyNotImplementedError
 from ..optimizer.strategies import GradeMismatchError
 from ..optimizer.validator import validate_optimization_result
@@ -255,3 +258,45 @@ def get_job_result(job_id: str, job_repo: JobRepository = Depends(get_job_repo))
 def get_syteline_stub():
     """SyteLine integration stub status."""
     return SyteLineSyncStatus()
+
+
+@router.post("/gcode", response_model=GCodeExportResponse)
+def export_gcode(
+    payload: GCodeGenerateApiRequest,
+    inv_repo: InventoryRepository = Depends(get_inv_repo),
+    job_repo: JobRepository = Depends(get_job_repo)
+):
+    """
+    Generates demo-grade RS-274 G-code for an optimization result and machine profile.
+    Enforces safety disclaimers, machine automation gating, and physical boundary checks.
+    """
+    res = payload.result
+    if res is None:
+        if not payload.job_id:
+            raise HTTPException(status_code=400, detail="Either 'result' or 'job_id' must be provided.")
+        res = job_repo.get_result(payload.job_id)
+        if not res:
+            raise HTTPException(status_code=404, detail=f"Job '{payload.job_id}' not found.")
+
+    target_machine = None
+    if payload.machine_id:
+        target_machine = inv_repo.get_machine(payload.machine_id)
+        if not target_machine:
+            raise HTTPException(status_code=404, detail=f"Machine '{payload.machine_id}' not found.")
+    else:
+        target_machine = res.machine
+
+    try:
+        gcode_resp = generate_job_gcode(
+            result=res,
+            machine=target_machine,
+            job_name=payload.job_name,
+            customer_ref=payload.customer_ref,
+            allow_unplaced_export=payload.allow_unplaced_export
+        )
+        return gcode_resp
+    except GCodeGenerationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error generating G-code: {str(e)}")
+

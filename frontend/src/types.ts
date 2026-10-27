@@ -19,6 +19,12 @@ export interface MachineProfile {
   preferred_direction: string;
   hourly_rate?: number;
   feed_rate_ipm?: number;
+  rapid_rate_ipm?: number;
+  safe_z?: number;
+  origin?: string;
+  gcode_supported?: boolean;
+  gcode_dialect?: string;
+  units?: string;
   available_hours_limit?: number;
   support_level?: 'fully_supported' | 'basic_heuristic';
 }
@@ -328,6 +334,11 @@ export interface SavedJob {
   parts_demanded_count?: number;
   latest_result?: OptimizationResult | null;
   comparison_results?: OptimizationResult[];
+  last_gcode_export?: {
+    exported_at: string;
+    machine_name: string;
+    filenames: string[];
+  };
 }
 
 export interface RemnantInventoryItem {
@@ -353,3 +364,34 @@ export interface ActivityLogItem {
   timestamp: string;
   yield_pct?: number;
 }
+
+export interface GCodeFilePayload {
+  block_index: number;
+  stock_id: string;
+  filename: string;
+  content: string;
+  line_count: number;
+  cut_count: number;
+  estimated_cut_length_in: number;
+  estimated_time_minutes: number;
+  path_check_passed: boolean;
+  path_check_message: string;
+}
+
+export interface GCodeExportResponse {
+  job_id: string;
+  machine_id: string;
+  machine_name: string;
+  dialect: string;
+  warning_banner: string;
+  files: GCodeFilePayload[];
+  total_cuts: number;
+  all_passed: boolean;
+  timestamp: string;
+}
+
+export interface GCodeButtonState {
+  isEnabled: boolean;
+  reason?: string;
+}
+

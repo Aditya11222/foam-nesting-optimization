@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Edit3,
@@ -32,6 +32,8 @@ interface JobHeaderProps {
   onSaveJob: () => void;
   onExportCSV: () => void;
   isSaved?: boolean;
+  onGenerateGCode?: () => void;
+  gcodeButtonState?: { isEnabled: boolean; reason?: string };
 }
 
 export const JobHeader: React.FC<JobHeaderProps> = ({
@@ -52,6 +54,8 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
   onSaveJob,
   onExportCSV,
   isSaved,
+  onGenerateGCode,
+  gcodeButtonState = { isEnabled: false },
 }) => {
   const { t, i18n } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
@@ -292,14 +296,23 @@ export const JobHeader: React.FC<JobHeaderProps> = ({
           <span>Export CSV</span>
         </button>
 
-        {/* Action Button: Generate G-Code (Honest Disabled Tooltip) */}
+        {/* Action Button: Generate G-Code (Data-driven state & honest tooltip) */}
         <button
           type="button"
-          disabled
-          title={t('gcode_tooltip')}
-          className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-slate-900 rounded-lg opacity-70 cursor-not-allowed shadow-2xs transition"
+          onClick={gcodeButtonState.isEnabled ? onGenerateGCode : undefined}
+          disabled={!gcodeButtonState.isEnabled}
+          title={
+            gcodeButtonState.isEnabled
+              ? 'Generate demo-grade CNC G-code cutting program (RS-274)'
+              : gcodeButtonState.reason || t('gcode_tooltip')
+          }
+          className={`hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-lg shadow-2xs transition ${
+            gcodeButtonState.isEnabled
+              ? 'bg-slate-900 hover:bg-slate-800 text-white cursor-pointer'
+              : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+          }`}
         >
-          <FileCode className="w-3.5 h-3.5 text-slate-300" />
+          <FileCode className={`w-3.5 h-3.5 ${gcodeButtonState.isEnabled ? 'text-amber-400' : 'text-slate-400'}`} />
           <span>Generate G-Code</span>
         </button>
       </div>

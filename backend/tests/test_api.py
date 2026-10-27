@@ -124,3 +124,83 @@ def test_api_optimize_waterjet_clearance_limit_exceeded():
     res = client.post("/api/optimize", json=payload)
     assert res.status_code == 422
     assert "maximum throat cut height" in res.json()["detail"].lower()
+
+
+def test_api_gcode_export_endpoint():
+    # 1. Run optimization first
+    opt_payload = {
+        "job_id": "API-GCODE-TEST",
+        "customer": "GCode Client",
+        "grade": "HR-40",
+        "machine_id": "saw-g1",
+        "algorithm_id": "best_fit_decreasing",
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Test Cushion",
+                "name": "Test Cushion",
+                "grade": "HR-40",
+                "length": 24.0,
+                "width": 24.0,
+                "height": 6.0,
+                "quantity": 2
+            }
+        ]
+    }
+    opt_res = client.post("/api/optimize", json=opt_payload)
+    assert opt_res.status_code == 200
+    result_data = opt_res.json()
+
+    # 2. Export G-code for this result
+    gcode_req = {
+        "result": result_data,
+        "machine_id": "saw-g1",
+        "job_name": "API G-Code Job",
+        "customer_ref": "GCode Client"
+    }
+    gcode_res = client.post("/api/gcode", json=gcode_req)
+    assert gcode_res.status_code == 200
+    data = gcode_res.json()
+    assert data["job_id"] == "API-GCODE-TEST"
+    assert data["all_passed"] is True
+    assert len(data["files"]) >= 1
+    first_file = data["files"][0]
+    assert first_file["path_check_passed"] is True
+    assert "DEMO OUTPUT: NOT VALIDATED ON A REAL MACHINE" in first_file["content"]
+    assert "G20" in first_file["content"]
+    assert "M30" in first_file["content"]
+
+
+def test_api_gcode_export_manual_machine_rejected():
+    opt_payload = {
+        "job_id": "API-GCODE-MAN",
+        "grade": "HR-40",
+        "machine_id": "saw-g1",
+        "algorithm_id": "best_fit_decreasing",
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Test Cushion",
+                "name": "Test Cushion",
+                "grade": "HR-40",
+                "length": 24.0,
+                "width": 24.0,
+                "height": 6.0,
+                "quantity": 1
+            }
+        ]
+    }
+    opt_res = client.post("/api/optimize", json=opt_payload)
+    assert opt_res.status_code == 200
+    result_data = opt_res.json()
+
+    # Attempt to export for a manual machine (saw-vert-man)
+    gcode_req = {
+        "result": result_data,
+        "machine_id": "saw-vert-man"
+    }
+    gcode_res = client.post("/api/gcode", json=gcode_req)
+    assert gcode_res.status_code == 400
+    assert "manual" in gcode_res.json()["detail"].lower()
+    assert "does not support g-code" in gcode_res.json()["detail"].lower()
+

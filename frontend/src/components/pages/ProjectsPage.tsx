@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FolderKanban,
@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
-  Database
+  Database,
+  FileCode
 } from 'lucide-react';
 import type { SavedJob } from '../../types';
 
@@ -202,6 +203,15 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                           <div className="text-[10px] text-slate-400 font-normal flex items-center space-x-1 mt-0.5 truncate">
                             <Tag className="w-2.5 h-2.5 shrink-0" />
                             <span className="truncate">{job.customer_ref}</span>
+                          </div>
+                        )}
+                        {job.last_gcode_export && (
+                          <div
+                            className="text-[10px] text-amber-700 font-medium flex items-center space-x-1 mt-0.5 truncate"
+                            title={`Exported on ${job.last_gcode_export.machine_name} (${job.last_gcode_export.filenames.join(', ')})`}
+                          >
+                            <FileCode className="w-2.5 h-2.5 shrink-0 text-amber-600" />
+                            <span>G-code exported {new Date(job.last_gcode_export.exported_at).toLocaleDateString()}</span>
                           </div>
                         )}
                       </td>

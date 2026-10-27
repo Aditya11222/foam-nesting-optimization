@@ -37,6 +37,12 @@ class MachineProfile(BaseModel):
     preferred_direction: str = "X"
     hourly_rate: float = Field(default=65.0, description="Operating rate in $/hr")
     feed_rate_ipm: float = Field(default=100.0, description="Cutting speed in inches per min")
+    rapid_rate_ipm: float = Field(default=300.0, description="Rapid travel speed in inches per min")
+    safe_z: float = Field(default=2.0, description="Safe retract clearance in inches above stock")
+    origin: str = Field(default="block_corner_front_left_bottom", description="Work coordinate origin")
+    gcode_supported: bool = Field(default=False, description="Whether this machine supports G-code export")
+    gcode_dialect: str = Field(default="generic_rs274", description="G-code dialect")
+    units: str = Field(default="inches", description="Measurement units")
     available_hours_limit: Optional[float] = Field(default=None, description="Available machine capacity in hours")
     support_level: Optional[str] = Field(default="fully_supported", description="Engine support level: fully_supported or basic_heuristic")
 
@@ -329,3 +335,39 @@ class OptimizationResult(BaseModel):
     verify_iterations: Optional[int] = None
     fallback_used: Optional[bool] = None
     machine_assignment_reason: Optional[str] = None
+
+
+class GCodeFilePayload(BaseModel):
+    block_index: int
+    stock_id: str
+    filename: str
+    content: str
+    line_count: int
+    cut_count: int
+    estimated_cut_length_in: float
+    estimated_time_minutes: float
+    path_check_passed: bool
+    path_check_message: str
+
+
+class GCodeExportResponse(BaseModel):
+    job_id: str
+    machine_id: str
+    machine_name: str
+    dialect: str
+    warning_banner: str
+    files: List[GCodeFilePayload]
+    total_cuts: int
+    all_passed: bool
+    timestamp: str
+
+
+class GCodeGenerateApiRequest(BaseModel):
+    result: Optional[OptimizationResult] = None
+    job_id: Optional[str] = None
+    machine_id: Optional[str] = None
+    job_name: Optional[str] = None
+    customer_ref: Optional[str] = None
+    allow_unplaced_export: bool = False
+
+

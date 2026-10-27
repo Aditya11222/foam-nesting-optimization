@@ -5,6 +5,7 @@ import type {
   OptimizationRequest,
   AlgorithmInfo,
   RemnantAgingStatus,
+  GCodeExportResponse,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:8000/api');
@@ -64,3 +65,24 @@ export async function compareAlgorithms(payload: OptimizationRequest): Promise<O
   }
   return res.json();
 }
+
+export async function exportGCode(payload: {
+  result?: OptimizationResult;
+  job_id?: string;
+  machine_id?: string;
+  job_name?: string;
+  customer_ref?: string;
+  allow_unplaced_export?: boolean;
+}): Promise<GCodeExportResponse> {
+  const res = await fetch(`${API_BASE}/gcode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'G-code export failed');
+  }
+  return res.json();
+}
+
