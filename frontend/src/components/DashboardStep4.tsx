@@ -23,8 +23,6 @@ import {
   YAxis,
   Tooltip,
   Legend,
-  PieChart,
-  Pie,
   Cell,
   CartesianGrid
 } from 'recharts';
@@ -35,6 +33,8 @@ interface DashboardStep4Props {
   comparisonResults?: OptimizationResult[] | null;
   onGoToCutSteps: () => void;
   onExportCSV: () => void;
+  onAddRemnantToInventory?: (remnant: any) => void;
+  onAddAllRemnantsToInventory?: (remnants: any[]) => void;
 }
 
 const CU_FT_IN_CU_IN = 1728.0;
@@ -50,7 +50,10 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   comparisonResults,
   onGoToCutSteps,
   onExportCSV,
+  onAddRemnantToInventory,
+  onAddAllRemnantsToInventory,
 }) => {
+  const [savedRemnantCodes, setSavedRemnantCodes] = useState<Set<string>>(new Set());
   const { t, i18n } = useTranslation();
   const isEs = i18n.language === 'es';
 
@@ -257,11 +260,12 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   }, [currentResult.blocks]);
 
   // Chart 5: Cost Breakdown Waterfall / Components
-  const costBreakdownData = useMemo(() => [
-    { name: isEs ? 'Materia Prima' : 'Raw Foam', value: Math.round(optMaterialCost), color: '#3B82F6' },
-    { name: isEs ? 'Tiempo de Sierra' : 'Saw Operation', value: Math.round(optSawCost), color: '#6366F1' },
-    { name: isEs ? 'Crédito Remanente (-)' : 'Remnant Credit (-)', value: Math.round(optRemnantCredit), color: '#10B981' },
-  ], [optMaterialCost, optSawCost, optRemnantCredit, isEs]);
+  const costBreakdownBarData = useMemo(() => [
+    { component: isEs ? 'Materia Prima' : 'Raw Foam', amount: Math.round(optMaterialCost), color: '#3B82F6', isCredit: false },
+    { component: isEs ? 'Tiempo de Sierra' : 'Saw Operation', amount: Math.round(optSawCost), color: '#6366F1', isCredit: false },
+    { component: isEs ? 'Crédito Remanente (-)' : 'Remnant Credit (-)', amount: Math.round(optRemnantCredit), color: '#10B981', isCredit: true },
+    { component: isEs ? 'Costo Neto Total' : 'Net Total Cost', amount: Math.max(0, Math.round(optNetJobCost)), color: '#0F172A', isCredit: false },
+  ], [optMaterialCost, optSawCost, optRemnantCredit, optNetJobCost, isEs]);
 
   // Chart 6: Machine Efficiency Comparison
   const machineEfficiencyData = useMemo(() => [
@@ -673,45 +677,48 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
           </p>
         </div>
 
-        {/* Chart 5: Cost Breakdown Components */}
+        {/* Chart 5: Cost Component Breakdown (Bar/Waterfall Composition) */}
         <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
               <span className="w-2 h-2 rounded-full bg-cyan-500" />
-              <span>Cost Component Breakdown</span>
+              <span>{t('cost_component_breakdown')}</span>
             </span>
-            <span className="text-[10px] font-mono text-slate-400">${Math.round(optNetJobCost)} Total</span>
+            <span className="text-[10px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+              Net Cost: ${Math.round(optNetJobCost).toLocaleString()}
+            </span>
           </div>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={costBreakdownData}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={75}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
-                  labelLine={false}
-                >
-                  {costBreakdownData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
+              <BarChart data={costBreakdownBarData} margin={{ top: 15, right: 15, left: -10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                <XAxis dataKey="component" tick={{ fontSize: 10, fill: '#64748B' }} />
+                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => `$${val}`} />
                 <Tooltip
-                  formatter={(val: any) => [`$${val}`, 'Cost']}
+                  formatter={(val: any, _name: any, item: any) => [
+                    `${item.payload.isCredit ? '-$' : '$'}${Math.abs(Number(val)).toLocaleString()}`,
+                    item.payload.component,
+                  ]}
                   contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
                 />
-              </PieChart>
+                <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                  {costBreakdownBarData.map((entry: { color: string }, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            Remnant recovery offsets {((optRemnantCredit / Math.max(1, optMaterialCost)) * 100).toFixed(1)}% of foam bun material cost
-          </p>
+          <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-50 pt-2 px-1">
+            <span>* {t('cost_disclaimer')}</span>
+            <span className="text-emerald-600 font-medium">
+              Remnant recovery offset: ${Math.round(optRemnantCredit)} ({((optRemnantCredit / Math.max(1, optMaterialCost)) * 100).toFixed(1)}% of foam)
+            </span>
+          </div>
         </div>
 
         {/* Chart 6: Machine Efficiency Comparison */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+<div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
             <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
               <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -856,9 +863,36 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
             <Layers className="w-4 h-4 text-emerald-600" />
             <span>{t('remnants_recorded')} ({allRemnants.length})</span>
           </h3>
-          <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-            Total Remnant Recovery: {optRemnantsCuFt.toFixed(1)} ft³ (${Math.round(optRemnantCredit)} Credit)
-          </span>
+          <div className="flex items-center space-x-2">
+            <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Total Remnant Recovery: {optRemnantsCuFt.toFixed(1)} ft³ (${Math.round(optRemnantCredit)} Credit)
+            </span>
+            {allRemnants.length > 0 && onAddAllRemnantsToInventory && (
+              <button
+                type="button"
+                onClick={() => {
+                  const items = allRemnants.map((r) => ({
+                    id: `rem-${Date.now().toString().slice(-6)}-${r.code}`,
+                    remnant_id: r.code,
+                    grade: r.grade,
+                    length: r.length,
+                    width: r.width,
+                    height: r.height,
+                    volume_cu_in: r.volume,
+                    source_job_id: currentResult.job_id,
+                    source_job_name: currentResult.job_id,
+                    created_at: new Date().toISOString(),
+                    status: 'available' as const,
+                  }));
+                  onAddAllRemnantsToInventory(items);
+                  setSavedRemnantCodes(new Set(allRemnants.map((r) => r.code)));
+                }}
+                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition cursor-pointer"
+              >
+                + Add All to Inventory
+              </button>
+            )}
+          </div>
         </div>
 
         {allRemnants.length === 0 ? (
@@ -897,10 +931,35 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
                       </td>
                       <td className="py-2.5 px-3 font-medium text-slate-600">{r.storage_location || 'Bay R-04'}</td>
                       <td className="py-2.5 px-3 text-center">
-                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                          <CheckCircle2 className="w-3 h-3 text-blue-500" />
-                          <span>Stocked into ERP</span>
-                        </span>
+                        {savedRemnantCodes.has(r.code) ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>In Inventory</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAddRemnantToInventory?.({
+                                id: `rem-${Date.now().toString().slice(-6)}-${r.code}`,
+                                remnant_id: r.code,
+                                grade: r.grade,
+                                length: r.length,
+                                width: r.width,
+                                height: r.height,
+                                volume_cu_in: r.volume,
+                                source_job_id: currentResult.job_id,
+                                source_job_name: currentResult.job_id,
+                                created_at: new Date().toISOString(),
+                                status: 'available'
+                              });
+                              setSavedRemnantCodes((prev) => new Set([...prev, r.code]));
+                            }}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
+                          >
+                            <span>+ Add to Inventory</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

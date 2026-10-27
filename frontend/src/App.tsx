@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './i18n';
 import type {
@@ -9,6 +9,10 @@ import type {
   BlockInput,
   OptimizationResult,
   OptimizationRequest,
+  NavRoute,
+  SavedJob,
+  RemnantInventoryItem,
+  ActivityLogItem,
 } from './types';
 import {
   fetchGrades,
@@ -17,8 +21,18 @@ import {
   optimizeJob,
   compareAlgorithms,
 } from './api';
+import {
+  getStorageData,
+  saveJob,
+  deleteJob,
+  saveInventoryBlocks,
+  addRemnants,
+  logActivity,
+  clearDemoStorage,
+} from './utils/storage';
 import { TopNavbar } from './components/TopNavbar';
 import { IconRail } from './components/IconRail';
+import { JobHeader } from './components/JobHeader';
 import { ChevronStepper, type StepItem } from './components/ChevronStepper';
 import { SidebarInputs } from './components/SidebarInputs';
 import { AlgorithmPlacementCard } from './components/AlgorithmPlacementCard';
@@ -27,16 +41,14 @@ import { ExecutiveSummaryCard } from './components/ExecutiveSummaryCard';
 import { DashboardStep4 } from './components/DashboardStep4';
 import { Step4Placeholder } from './components/HelperComponents';
 import { exportJobCSV } from './utils/csvExport';
-import {
-  CheckCircle2,
-  AlertTriangle,
-  FileCode,
-  Download,
-  Loader2,
-  Clock,
-} from 'lucide-react';
 
-// Proposal Job #4821 Default Sample Parts (154 items total)
+// Pages
+import { DashboardPage } from './components/pages/DashboardPage';
+import { ProjectsPage } from './components/pages/ProjectsPage';
+import { InventoryPage } from './components/pages/InventoryPage';
+import { ReportsPage } from './components/pages/ReportsPage';
+
+// Default Sample Parts for Sample Job #4821 (154 items total)
 const SAMPLE_JOB_PARTS: PartItem[] = [
   {
     id: 'part-1',
@@ -107,7 +119,49 @@ const WORKFLOW_STEPS: StepItem[] = [
 ];
 
 export function App() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  // Client-side Navigation Router
+  const getInitialRoute = (): NavRoute => {
+    const path = window.location.pathname;
+    const validRoutes: NavRoute[] = ['/dashboard', '/projects', '/optimization', '/inventory', '/reports'];
+    return validRoutes.includes(path as NavRoute) ? (path as NavRoute) : '/optimization';
+  };
+
+  const [currentRoute, setCurrentRoute] = useState<NavRoute>(getInitialRoute);
+
+  const navigateTo = (route: NavRoute) => {
+    setCurrentRoute(route);
+    if (window.location.pathname !== route) {
+      window.history.pushState({}, '', route);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const validRoutes: NavRoute[] = ['/dashboard', '/projects', '/optimization', '/inventory', '/reports'];
+      if (validRoutes.includes(path as NavRoute)) {
+        setCurrentRoute(path as NavRoute);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Shared Persistence Store State (from localStorage)
+  const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [inventoryBlocks, setInventoryBlocks] = useState<BlockInput[]>(DEFAULT_BLOCKS);
+  const [remnants, setRemnants] = useState<RemnantInventoryItem[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLogItem[]>([]);
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+
+  // Active Job Metadata
+  const [jobName, setJobName] = useState<string>('Untitled job');
+  const [currentJobId, setCurrentJobId] = useState<string>(() => `JOB-${Date.now().toString().slice(-6)}`);
+  const [customerRef, setCustomerRef] = useState<string>('');
+  const [createdAt, setCreatedAt] = useState<string>(() => new Date().toISOString());
+  const [lastOptimizedAt, setLastOptimizedAt] = useState<string | undefined>(undefined);
 
   // Active workflow step: 1 (Setup), 2 (Algorithm & Placement), 3 (3D Plan), 4 (Results)
   const [activeStep, setActiveStep] = useState<number>(2);
@@ -140,9 +194,17 @@ export function App() {
 
   const timerRef = useRef<any>(null);
 
-  // Initial Data Fetch
+  // Load persistence data and metadata on initial mount
   useEffect(() => {
     async function init() {
+      // 1. Load LocalStorage
+      const stored = getStorageData();
+      setSavedJobs(stored.jobs);
+      setInventoryBlocks(stored.inventoryBlocks);
+      setRemnants(stored.remnants);
+      setActivityLog(stored.activity);
+
+      // 2. Load API Metadata
       try {
         const [g, m, a] = await Promise.all([
           fetchGrades(),
@@ -171,9 +233,11 @@ export function App() {
         }
         const autoRunParam = params.get('autorun');
         if (autoRunParam === 'true') {
+          setJobName('Sample job #4821');
+          setCurrentJobId('JOB-4821');
           const autoReq: OptimizationRequest = {
             job_id: 'JOB-4821',
-            customer: 'Acme Bedding SO-10592',
+            customer: customerRef || undefined,
             grade: 'HR-40',
             machine_id: activeMachId || 'saw-g2',
             machine_objective: 'lowest_cost',
@@ -190,6 +254,7 @@ export function App() {
             setResultsByAlgo({ ortools_block_assignment: res, best_fit_decreasing: res });
             setIs3DGenerated(true);
             setIsStale(false);
+            setLastOptimizedAt(new Date().toISOString());
           } catch (e) {
             console.error('Autorun optimize failed:', e);
           }
@@ -258,8 +323,8 @@ export function App() {
 
   // Build current payload helper
   const buildPayload = (algoId: string): OptimizationRequest => ({
-    job_id: `JOB-${Date.now().toString().slice(-6)}`,
-    customer: 'Acme Bedding SO-10592',
+    job_id: currentJobId,
+    customer: customerRef || undefined,
     grade: selectedGrade,
     machine_id: selectedMachineId,
     machine_objective: machineObjective,
@@ -286,7 +351,13 @@ export function App() {
       }));
       setIsStale(false);
       setIs3DGenerated(true);
+      const now = new Date().toISOString();
+      setLastOptimizedAt(now);
       setActiveStep(2);
+
+      // Log activity
+      logActivity('run', `Optimized: ${jobName}`, currentJobId, jobName, result.net_utilization_pct);
+      setActivityLog(getStorageData().activity);
     } catch (err: any) {
       alert(`Optimization error: ${err.message}`);
     } finally {
@@ -318,7 +389,14 @@ export function App() {
 
       setIsStale(false);
       setIs3DGenerated(true);
+      const now = new Date().toISOString();
+      setLastOptimizedAt(now);
       setActiveStep(2);
+
+      // Log activity
+      const bestYield = winner ? winner.net_utilization_pct : undefined;
+      logActivity('run', `Compared all algorithms: ${jobName}`, currentJobId, jobName, bestYield);
+      setActivityLog(getStorageData().activity);
     } catch (err: any) {
       alert(`Comparison error: ${err.message}`);
     } finally {
@@ -335,13 +413,20 @@ export function App() {
     setSelectedAlgorithmId(algoId);
   };
 
+  // Load Sample Job #4821
   const handleLoadSample = () => {
     setSelectedGrade('HR-40');
     setSkinTrim(1.0);
     setKerf(0.125);
     setBlocks(DEFAULT_BLOCKS);
     setParts(SAMPLE_JOB_PARTS);
+    setJobName(t('sample_job_name') || 'Sample job #4821');
+    setCurrentJobId('JOB-4821');
+    setCustomerRef('');
+    setCreatedAt(new Date().toISOString());
+    setLastOptimizedAt(undefined);
     handleInputModified();
+    navigateTo('/optimization');
   };
 
   const handleAddBlock = () => {
@@ -407,8 +492,186 @@ export function App() {
     i18n.changeLanguage(nextLang);
   };
 
+  // Job Save Action (Header & Projects)
+  const handleSaveJob = () => {
+    const jobToSave: SavedJob = {
+      id: currentJobId,
+      job_id: currentJobId,
+      name: jobName.trim() || t('untitled_job'),
+      customer_ref: customerRef,
+      grade: selectedGrade,
+      machine_id: selectedMachineId,
+      algorithm_id: selectedAlgorithmId,
+      parts: parts,
+      blocks: blocks,
+      skin_trim: skinTrim,
+      kerf: kerf,
+      machine_objective: machineObjective,
+      allow_mixed_grades: allowMixedGrades,
+      created_at: createdAt,
+      updated_at: new Date().toISOString(),
+      last_optimized_at: lastOptimizedAt,
+      status: isStale ? 'Stale' : currentResult ? 'Optimized' : 'Not optimized',
+      yield_pct: currentResult ? currentResult.net_utilization_pct : undefined,
+      parts_placed_count: currentResult ? currentResult.total_parts_placed : undefined,
+      parts_demanded_count: currentResult ? currentResult.total_parts_demanded : undefined,
+      latest_result: currentResult,
+      comparison_results: comparisonResults,
+    };
+
+    const updated = saveJob(jobToSave);
+    setSavedJobs(updated);
+    setActivityLog(getStorageData().activity);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2500);
+  };
+
+  // Projects Page Actions
+  const handleOpenJob = (job: SavedJob) => {
+    setCurrentJobId(job.job_id);
+    setJobName(job.name);
+    setCustomerRef(job.customer_ref || '');
+    setSelectedGrade(job.grade);
+    setSelectedMachineId(job.machine_id);
+    setSelectedAlgorithmId(job.algorithm_id);
+    setParts(job.parts);
+    setBlocks(job.blocks);
+    setSkinTrim(job.skin_trim);
+    setKerf(job.kerf);
+    setMachineObjective(job.machine_objective || 'lowest_cost');
+    setAllowMixedGrades(job.allow_mixed_grades || false);
+    setCreatedAt(job.created_at);
+    setLastOptimizedAt(job.last_optimized_at);
+    setIsStale(job.status === 'Stale');
+
+    if (job.latest_result) {
+      setResultsByAlgo({ [job.algorithm_id]: job.latest_result });
+      setIs3DGenerated(true);
+    } else {
+      setResultsByAlgo({});
+      setIs3DGenerated(false);
+    }
+
+    if (job.comparison_results) {
+      setComparisonResults(job.comparison_results);
+    }
+
+    navigateTo('/optimization');
+    setActiveStep(2);
+  };
+
+  const handleNewJob = () => {
+    const newId = `JOB-${Date.now().toString().slice(-6)}`;
+    setCurrentJobId(newId);
+    setJobName(t('untitled_job') || 'Untitled job');
+    setCustomerRef('');
+    setCreatedAt(new Date().toISOString());
+    setLastOptimizedAt(undefined);
+    setBlocks(DEFAULT_BLOCKS);
+    setParts([]);
+    setResultsByAlgo({});
+    setComparisonResults([]);
+    setIsStale(false);
+    setIs3DGenerated(false);
+    setActiveStep(1);
+    navigateTo('/optimization');
+  };
+
+  const handleDuplicateJob = (job: SavedJob) => {
+    const newId = `JOB-${Date.now().toString().slice(-6)}`;
+    const duplicated: SavedJob = {
+      ...job,
+      id: newId,
+      job_id: newId,
+      name: `Copy of ${job.name}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const updated = saveJob(duplicated);
+    setSavedJobs(updated);
+    setActivityLog(getStorageData().activity);
+  };
+
+  const handleRenameSavedJob = (jobId: string, newName: string) => {
+    const target = savedJobs.find((j) => j.id === jobId);
+    if (target) {
+      const updated = saveJob({ ...target, name: newName });
+      setSavedJobs(updated);
+      if (currentJobId === target.job_id) {
+        setJobName(newName);
+      }
+    }
+  };
+
+  const handleDeleteJob = (id: string) => {
+    const updated = deleteJob(id);
+    setSavedJobs(updated);
+    setActivityLog(getStorageData().activity);
+  };
+
+  // Inventory Page Actions
+  const handleAddInventoryBlock = (newBlock: BlockInput) => {
+    const updated = [...inventoryBlocks, newBlock];
+    setInventoryBlocks(updated);
+    saveInventoryBlocks(updated);
+  };
+
+  const handleUpdateInventoryBlock = (idx: number, updatedBlock: Partial<BlockInput>) => {
+    const updated = inventoryBlocks.map((b, i) => (i === idx ? { ...b, ...updatedBlock } : b));
+    setInventoryBlocks(updated);
+    saveInventoryBlocks(updated);
+  };
+
+  const handleRemoveInventoryBlock = (idx: number) => {
+    const updated = inventoryBlocks.filter((_, i) => i !== idx);
+    setInventoryBlocks(updated);
+    saveInventoryBlocks(updated);
+  };
+
+  const handleRemoveRemnant = (id: string) => {
+    const updated = remnants.filter((r) => r.id !== id);
+    setRemnants(updated);
+    const data = getStorageData();
+    data.remnants = updated;
+    localStorage.setItem('tatras_nestpro_demo_v1', JSON.stringify(data));
+  };
+
+  const handleUseGradeInOptimization = (grade: string, gradeBlocks: BlockInput[]) => {
+    setSelectedGrade(grade);
+    setBlocks(gradeBlocks);
+    handleInputModified();
+    navigateTo('/optimization');
+    setActiveStep(1);
+  };
+
+  const handleAddRemnantToInventory = (remItem: RemnantInventoryItem) => {
+    const updated = addRemnants([remItem]);
+    setRemnants(updated);
+    setActivityLog(getStorageData().activity);
+  };
+
+  const handleAddAllRemnantsToInventory = (remItems: RemnantInventoryItem[]) => {
+    const updated = addRemnants(remItems);
+    setRemnants(updated);
+    setActivityLog(getStorageData().activity);
+  };
+
+  const handleClearDemoData = () => {
+    clearDemoStorage();
+    const stored = getStorageData();
+    setSavedJobs(stored.jobs);
+    setInventoryBlocks(stored.inventoryBlocks);
+    setRemnants(stored.remnants);
+    setActivityLog(stored.activity);
+    setResultsByAlgo({});
+    setComparisonResults([]);
+    setIsStale(false);
+    setIs3DGenerated(false);
+  };
+
   const currentResult: OptimizationResult | null = resultsByAlgo[selectedAlgorithmId] || null;
   const selectedMachine = machines.find((m) => m.id === selectedMachineId);
+  const selectedAlgorithm = algorithms.find((a) => a.id === selectedAlgorithmId);
 
   // Workflow step click handler
   const handleStepClick = (stepId: number) => {
@@ -424,205 +687,202 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-800 antialiased">
-      {/* 1.1 Top Navigation Bar */}
+      {/* 1.1 Top Navigation Bar (5 Real Client-Side Pages) */}
       <TopNavbar
+        currentRoute={currentRoute}
+        onNavigate={navigateTo}
         currentLang={i18n.language}
         onToggleLang={handleToggleLang}
+        savedJobsCount={savedJobs.length}
       />
 
       {/* Main Layout Area: Slim Icon Rail + Page Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 1.2 Slim Icon Rail */}
+        {/* 1.2 Slim Icon Rail (Synchronized with currentRoute) */}
         <IconRail
-          activeTab={activeStep === 1 ? 'home' : 'optimization'}
-          onNavigateHome={() => setActiveStep(1)}
+          currentRoute={currentRoute}
+          onNavigate={navigateTo}
         />
 
-        {/* Scrollable Work Area */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* 1.3 Page Header Row */}
-          <section className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-2xs">
-            {/* Left: Project / Batch title & Metadata */}
-            <div className="flex flex-col">
-              <div className="flex items-center space-x-2.5">
-                <h1 className="text-lg lg:text-xl font-bold text-slate-900 tracking-tight">
-                  Nest: Acme Bedding SO-10592 — Batch #4821
-                </h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                  Grade {selectedGrade}
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 flex items-center space-x-2">
-                <span>Created Oct 25, 2026</span>
-                <span>•</span>
-                <span>
-                  Cut Type: <strong>{selectedMachine?.cut_type === 'free' ? 'Free / Contour' : 'Guillotine Rotating'}</strong>
-                </span>
-                <span>•</span>
-                <span>
-                  Machine: <strong>{selectedMachine?.name || 'Saw Station 2'}</strong>
-                </span>
-              </p>
-            </div>
-
-            {/* Right: Real-time Status Badge & Action Buttons */}
-            <div className="flex items-center space-x-3">
-              {/* Real-time Status Badge */}
-              {isOptimizing ? (
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold animate-pulse">
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                  <span>Optimizing ({elapsedSeconds}s)...</span>
-                </div>
-              ) : isStale ? (
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span>Inputs Modified (Stale)</span>
-                </div>
-              ) : currentResult ? (
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-semibold">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Project Status: Optimized</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-600 text-xs font-semibold">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span>Ready to Optimize</span>
-                </div>
-              )}
-
-              {/* Action Button: Export CSV */}
-              {currentResult && (
-                <button
-                  type="button"
-                  onClick={handleExportCSV}
-                  className="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-2xs transition cursor-pointer"
-                  title="Export complete placement & cut manifest to CSV"
-                >
-                  <Download className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Export CSV</span>
-                </button>
-              )}
-
-              {/* Action Button: Generate G-Code (Disabled) */}
-              <button
-                type="button"
-                disabled
-                title="G-code export is planned, not yet available"
-                className="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-slate-900 rounded-lg opacity-70 cursor-not-allowed shadow-2xs transition"
-              >
-                <FileCode className="w-4 h-4 text-slate-300" />
-                <span>Generate G-Code</span>
-              </button>
-            </div>
-          </section>
-
-          {/* 1.4 Chevron Stepper */}
-          <ChevronStepper
-            steps={WORKFLOW_STEPS}
-            activeStep={activeStep}
-            maxReachableStep={currentResult ? 4 : 2}
-            onStepClick={handleStepClick}
+        {/* Dynamic Route View Switcher (Page state survives switching tabs) */}
+        {currentRoute === '/dashboard' ? (
+          <DashboardPage
+            savedJobs={savedJobs}
+            currentJobName={jobName}
+            currentResult={currentResult}
+            onNavigateOptimization={(job) => {
+              if (job) handleOpenJob(job);
+              else navigateTo('/optimization');
+            }}
+            onLoadSample={handleLoadSample}
+            onClearDemoData={handleClearDemoData}
+            activityLog={activityLog}
+            retainedRemnantsCount={remnants.length}
           />
+        ) : currentRoute === '/projects' ? (
+          <ProjectsPage
+            savedJobs={savedJobs}
+            currentJobId={currentJobId}
+            onOpenJob={handleOpenJob}
+            onNewJob={handleNewJob}
+            onDuplicateJob={handleDuplicateJob}
+            onRenameJob={handleRenameSavedJob}
+            onDeleteJob={handleDeleteJob}
+          />
+        ) : currentRoute === '/inventory' ? (
+          <InventoryPage
+            blocks={inventoryBlocks}
+            remnants={remnants}
+            onAddBlock={handleAddInventoryBlock}
+            onUpdateBlock={handleUpdateInventoryBlock}
+            onRemoveBlock={handleRemoveInventoryBlock}
+            onRemoveRemnant={handleRemoveRemnant}
+            onUseGradeInOptimization={handleUseGradeInOptimization}
+          />
+        ) : currentRoute === '/reports' ? (
+          <ReportsPage
+            currentJobName={jobName}
+            currentResult={currentResult}
+            savedJobs={savedJobs}
+            isStale={isStale}
+            onExportCSV={handleExportCSV}
+          />
+        ) : (
+          /* Default: Optimization Workspace */
+          <div className="flex-1 flex flex-col overflow-y-auto">
+            {/* 1.3 Fix: Dynamic Editable Job Header Row */}
+            <JobHeader
+              jobName={jobName}
+              onRenameJob={setJobName}
+              jobId={currentJobId}
+              customerRef={customerRef}
+              grade={selectedGrade}
+              machineName={selectedMachine?.name || 'Saw Station 2'}
+              cutType={selectedMachine?.cut_type === 'free' ? 'Free / Contour' : 'Guillotine Rotating'}
+              algorithmName={selectedAlgorithm?.name}
+              createdAt={createdAt}
+              lastOptimizedAt={lastOptimizedAt}
+              isOptimizing={isOptimizing}
+              elapsedSeconds={elapsedSeconds}
+              isStale={isStale}
+              hasValidResult={currentResult != null}
+              onSaveJob={handleSaveJob}
+              onExportCSV={handleExportCSV}
+              isSaved={isSaved}
+            />
 
-          {/* Main View Area */}
-          <main className="flex-1 p-4 lg:p-6">
-            {activeStep === 1 ? (
-              /* Step 1: Clean Centered Card Form */
-              <SidebarInputs
-                mode="card"
-                onContinueToOptimization={() => setActiveStep(2)}
-                grades={grades}
-                selectedGrade={selectedGrade}
-                onSelectGrade={handleSelectGrade}
-                allowMixedGrades={allowMixedGrades}
-                onToggleMixedGrades={handleToggleMixedGrades}
-                machines={machines}
-                selectedMachineId={selectedMachineId}
-                onSelectMachine={handleSelectMachine}
-                machineObjective={machineObjective}
-                onSelectMachineObjective={setMachineObjective}
-                skinTrim={skinTrim}
-                onChangeSkinTrim={setSkinTrim}
-                kerf={kerf}
-                onChangeKerf={setKerf}
-                blocks={blocks}
-                onAddBlock={handleAddBlock}
-                onRemoveBlock={handleRemoveBlock}
-                onUpdateBlock={handleUpdateBlock}
-                parts={parts}
-                onAddPart={handleAddPart}
-                onRemovePart={handleRemovePart}
-                onUpdatePart={handleUpdatePart}
-                onLoadSample={handleLoadSample}
-                onInputModified={handleInputModified}
-              />
-            ) : (
-              /* Steps 2-4 Workspace */
-              <div className="space-y-6 max-w-7xl mx-auto w-full">
-                {/* 1.5 Three-Card Workspace: Equal Height Side-by-Side (30% / 40% / 30%) */}
-                <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-stretch w-full">
-                  {/* Left Card: Algorithm & Placement (30% width) */}
-                  <div className="lg:col-span-3 flex flex-col">
-                    <AlgorithmPlacementCard
-                      algorithms={algorithms}
-                      selectedAlgorithmId={selectedAlgorithmId}
-                      onSelectAlgorithm={handleSelectAlgorithm}
-                      onRunOptimization={handleRunOptimization}
-                      onCompareAll={handleCompareAll}
-                      isOptimizing={isOptimizing}
-                      elapsedSeconds={elapsedSeconds}
-                      isStale={isStale}
-                      currentResult={currentResult}
-                      comparisonResults={comparisonResults}
-                      onSelectResultFromTable={handleSelectResultFromTable}
-                    />
+            {/* 1.4 Chevron Stepper */}
+            <ChevronStepper
+              steps={WORKFLOW_STEPS}
+              activeStep={activeStep}
+              maxReachableStep={currentResult ? 4 : 2}
+              onStepClick={handleStepClick}
+            />
+
+            {/* Main View Area */}
+            <main className="flex-1 p-4 lg:p-6">
+              {activeStep === 1 ? (
+                /* Step 1: Clean Centered Card Form */
+                <SidebarInputs
+                  mode="card"
+                  customerRef={customerRef}
+                  onChangeCustomerRef={setCustomerRef}
+                  onContinueToOptimization={() => setActiveStep(2)}
+                  grades={grades}
+                  selectedGrade={selectedGrade}
+                  onSelectGrade={handleSelectGrade}
+                  allowMixedGrades={allowMixedGrades}
+                  onToggleMixedGrades={handleToggleMixedGrades}
+                  machines={machines}
+                  selectedMachineId={selectedMachineId}
+                  onSelectMachine={handleSelectMachine}
+                  machineObjective={machineObjective}
+                  onSelectMachineObjective={setMachineObjective}
+                  skinTrim={skinTrim}
+                  onChangeSkinTrim={setSkinTrim}
+                  kerf={kerf}
+                  onChangeKerf={setKerf}
+                  blocks={blocks}
+                  onAddBlock={handleAddBlock}
+                  onRemoveBlock={handleRemoveBlock}
+                  onUpdateBlock={handleUpdateBlock}
+                  parts={parts}
+                  onAddPart={handleAddPart}
+                  onRemovePart={handleRemovePart}
+                  onUpdatePart={handleUpdatePart}
+                  onLoadSample={handleLoadSample}
+                  onInputModified={handleInputModified}
+                />
+              ) : (
+                /* Steps 2-4 Workspace */
+                <div className="space-y-6 max-w-7xl mx-auto w-full">
+                  {/* 1.5 Three-Card Workspace: Equal Height Side-by-Side (30% / 40% / 30%) */}
+                  <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-stretch w-full">
+                    {/* Left Card: Algorithm & Placement (30% width) */}
+                    <div className="lg:col-span-3 flex flex-col">
+                      <AlgorithmPlacementCard
+                        algorithms={algorithms}
+                        selectedAlgorithmId={selectedAlgorithmId}
+                        onSelectAlgorithm={handleSelectAlgorithm}
+                        onRunOptimization={handleRunOptimization}
+                        onCompareAll={handleCompareAll}
+                        isOptimizing={isOptimizing}
+                        elapsedSeconds={elapsedSeconds}
+                        isStale={isStale}
+                        currentResult={currentResult}
+                        comparisonResults={comparisonResults}
+                        onSelectResultFromTable={handleSelectResultFromTable}
+                      />
+                    </div>
+
+                    {/* Center Card: Cutting Plan & Visualization (40% width) */}
+                    <div className="lg:col-span-4 flex flex-col">
+                      <CuttingPlanCard
+                        currentResult={currentResult}
+                        selectedMachine={selectedMachine}
+                        isStale={isStale}
+                        is3DGenerated={is3DGenerated}
+                        onGenerate3DPlan={() => setIs3DGenerated(true)}
+                      />
+                    </div>
+
+                    {/* Right Card: Optimization Executive Summary (30% width) */}
+                    <div className="lg:col-span-3 flex flex-col">
+                      <ExecutiveSummaryCard
+                        currentResult={currentResult}
+                        totalAvailableBlocks={blocks.reduce((acc, b) => acc + b.quantity, 0)}
+                        onGoToStep4={() => {
+                          setActiveStep(4);
+                          const el = document.getElementById('step4-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Center Card: Cutting Plan & Visualization (40% width) */}
-                  <div className="lg:col-span-4 flex flex-col">
-                    <CuttingPlanCard
-                      currentResult={currentResult}
-                      selectedMachine={selectedMachine}
-                      isStale={isStale}
-                      is3DGenerated={is3DGenerated}
-                      onGenerate3DPlan={() => setIs3DGenerated(true)}
-                    />
-                  </div>
-
-                  {/* Right Card: Optimization Executive Summary (30% width) */}
-                  <div className="lg:col-span-3 flex flex-col">
-                    <ExecutiveSummaryCard
-                      currentResult={currentResult}
-                      totalAvailableBlocks={blocks.reduce((acc, b) => acc + b.quantity, 0)}
-                      onGoToStep4={() => {
-                        setActiveStep(4);
-                        const el = document.getElementById('step4-section');
-                        if (el) el.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                    />
+                  {/* 1.6 Step 4 Detailed Analytics Section (Full width below the cards) */}
+                  <div id="step4-section" className="pt-2">
+                    {currentResult ? (
+                      <DashboardStep4
+                        currentResult={currentResult}
+                        comparisonResults={comparisonResults}
+                        onGoToCutSteps={() => {
+                          setActiveStep(3);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        onExportCSV={handleExportCSV}
+                        onAddRemnantToInventory={handleAddRemnantToInventory}
+                        onAddAllRemnantsToInventory={handleAddAllRemnantsToInventory}
+                      />
+                    ) : (
+                      <Step4Placeholder />
+                    )}
                   </div>
                 </div>
-
-                {/* 1.6 Step 4 Detailed Analytics Section (Full width below the cards) */}
-                <div id="step4-section" className="pt-2">
-                  {currentResult ? (
-                    <DashboardStep4
-                      currentResult={currentResult}
-                      comparisonResults={comparisonResults}
-                      onGoToCutSteps={() => {
-                        setActiveStep(3);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      onExportCSV={handleExportCSV}
-                    />
-                  ) : (
-                    <Step4Placeholder />
-                  )}
-                </div>
-              </div>
-            )}
-          </main>
-        </div>
+              )}
+            </main>
+          </div>
+        )}
       </div>
     </div>
   );

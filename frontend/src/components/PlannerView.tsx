@@ -110,10 +110,14 @@ export const PlannerView: React.FC<PlannerViewProps> = ({
       <div className="px-6 py-3 bg-white border-b border-[#E2E8F0] flex flex-wrap items-center justify-between gap-4 shadow-soft">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-bold text-[#0F172A]">Job #4821</span>
-            <span className="text-[#CBD5E1]">·</span>
-            <span className="text-xs text-[#475569]">Acme Bedding · SO-10592</span>
-          </div>
+              <span className="text-sm font-bold text-[#0F172A]">Job #{result.job_id}</span>
+              {result.customer && (
+                <>
+                  <span className="text-[#CBD5E1]">•</span>
+                  <span className="text-xs text-[#475569]">{result.customer}</span>
+                </>
+              )}
+            </div>
 
           <div className="flex items-center space-x-2 bg-[#F8FAFC] px-2.5 py-1 rounded-lg border border-[#CBD5E1] text-xs">
             <span className="text-[#64748B] font-medium">{t('grade')}:</span>

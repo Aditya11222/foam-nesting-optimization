@@ -20,7 +20,7 @@ export const PrintableCutSheet: React.FC<PrintableCutSheetProps> = ({ result, bl
             TATRAS NESTPRO — SAW CUT SHEET
           </div>
           <div className="text-sm font-bold text-gray-700 mt-1">
-            Job #{result.job_id} · Order: SO-10592 · Customer: Acme Bedding
+            Job #{result.job_id}{result.customer ? ` • Ref: ${result.customer}` : ""}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">
             Date Generated: {new Date(result.timestamp).toLocaleString()} | Engine: 3D Guillotine Slicing Heuristic

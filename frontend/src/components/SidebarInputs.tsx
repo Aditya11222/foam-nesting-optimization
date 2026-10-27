@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Plus,
@@ -11,6 +11,8 @@ import {
 import type { FoamGrade, MachineProfile, PartItem, BlockInput, OrientationMode } from '../types';
 
 export interface SidebarInputsProps {
+  customerRef?: string;
+  onChangeCustomerRef?: (ref: string) => void;
   grades: FoamGrade[];
   selectedGrade: string;
   onSelectGrade: (grade: string) => void;
@@ -40,6 +42,8 @@ export interface SidebarInputsProps {
 }
 
 export const SidebarInputs: React.FC<SidebarInputsProps> = ({
+  customerRef = '',
+  onChangeCustomerRef,
   grades,
   selectedGrade,
   onSelectGrade,
@@ -76,6 +80,29 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
 
   const totalPartsCount = parts.reduce((acc, p) => acc + p.quantity, 0);
   const totalBlocksCount = blocks.reduce((acc, b) => acc + b.quantity, 0);
+
+  // Optional Customer / Order Reference input
+  const renderCustomerRef = () => (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block font-medium text-slate-700 text-xs">
+          {t('customer_ref_label')}
+        </label>
+        <span className="text-[10px] text-slate-400">Optional</span>
+      </div>
+      <input
+        type="text"
+        value={customerRef}
+        onChange={(e) => {
+          onChangeCustomerRef?.(e.target.value);
+          onInputModified();
+        }}
+        placeholder={t('customer_ref_placeholder')}
+        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        maxLength={60}
+      />
+    </div>
+  );
 
   // Reusable Form Subcomponents:
   const renderGradeSelector = () => (
@@ -265,7 +292,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
   const renderBlocksSection = () => (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <label className="font-semibold text-slate-800 text-xs">{t('blocks_title')}</label>
+        <label className="font-semibold text-slate-800 text-xs">{t('available_blocks')}</label>
         <button
           type="button"
           onClick={onAddBlock}
@@ -278,16 +305,20 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
 
       <div className="space-y-2">
         {blocks.map((block, idx) => (
-          <div key={block.id || idx} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-bold text-slate-700 text-xs">
-                Bun #{idx + 1} ({block.grade})
+          <div
+            key={block.id || idx}
+            className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-mono font-medium text-slate-600 text-[11px]">
+                Bun #{idx + 1}
               </span>
               {blocks.length > 1 && (
                 <button
                   type="button"
                   onClick={() => onRemoveBlock(idx)}
-                  className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-red-500 transition cursor-pointer"
+                  title="Remove Block"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -296,10 +327,10 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
 
             <div className="grid grid-cols-4 gap-1.5">
               <div>
-                <label className="block text-[10px] text-slate-500">L (in)</label>
+                <label className="block text-[9px] text-slate-400">L</label>
                 <input
                   type="number"
-                  step="0.0625"
+                  step="0.5"
                   value={block.nominal_length}
                   onChange={(e) => {
                     onUpdateBlock(idx, { nominal_length: parseFloat(e.target.value) || 0 });
@@ -309,10 +340,10 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-slate-500">W (in)</label>
+                <label className="block text-[9px] text-slate-400">W</label>
                 <input
                   type="number"
-                  step="0.0625"
+                  step="0.5"
                   value={block.nominal_width}
                   onChange={(e) => {
                     onUpdateBlock(idx, { nominal_width: parseFloat(e.target.value) || 0 });
@@ -322,10 +353,10 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-slate-500">H (in)</label>
+                <label className="block text-[9px] text-slate-400">H</label>
                 <input
                   type="number"
-                  step="0.0625"
+                  step="0.5"
                   value={block.nominal_height}
                   onChange={(e) => {
                     onUpdateBlock(idx, { nominal_height: parseFloat(e.target.value) || 0 });
@@ -335,7 +366,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-slate-500">Qty</label>
+                <label className="block text-[9px] text-slate-400">Qty</label>
                 <input
                   type="number"
                   min="1"
@@ -364,7 +395,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
     <div>
       <div className="flex items-center justify-between mb-2">
         <div>
-          <label className="font-semibold text-slate-800 text-xs">{t('parts_title')}</label>
+          <label className="font-semibold text-slate-800 text-xs">{t('parts_demand')}</label>
           <span className="ml-2 text-[10px] text-slate-400">
             ({totalPartsCount} pcs across {parts.length} SKUs)
           </span>
@@ -379,7 +410,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
         </button>
       </div>
 
-      <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+      <div className="space-y-2">
         {parts.map((part, idx) => {
           const exceedsX = part.length > maxUsableX;
           const exceedsY = part.width > maxUsableY;
@@ -389,57 +420,40 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
           return (
             <div
               key={part.id || idx}
-              className={`p-2.5 rounded-lg border transition ${
-                hasDimError
-                  ? 'bg-amber-50/60 border-amber-300'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
+              className={`p-3 bg-slate-50 border rounded-lg text-xs space-y-2 ${
+                hasDimError ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'
               }`}
             >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: part.color_hex || '#3b82f6' }}
-                  />
-                  <input
-                    type="text"
-                    value={part.sku}
-                    onChange={(e) => {
-                      onUpdatePart(idx, { sku: e.target.value });
-                      onInputModified();
-                    }}
-                    placeholder="SKU"
-                    className="font-bold text-xs text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none w-24"
+                    style={{ backgroundColor: part.color_hex }}
                   />
                   <input
                     type="text"
                     value={part.name}
                     onChange={(e) => {
-                      onUpdatePart(idx, { name: e.target.value });
+                      onUpdatePart(idx, { name: e.target.value, sku: e.target.value });
                       onInputModified();
                     }}
-                    placeholder="Name"
-                    className="text-[11px] text-slate-500 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none w-32 truncate hidden sm:inline"
+                    className="font-medium text-slate-800 text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none w-full"
+                    placeholder="Part Name"
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                    {part.grade}
-                  </span>
-                  {parts.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => onRemovePart(idx)}
-                      className="text-red-400 hover:text-red-600 p-0.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                {parts.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onRemovePart(idx)}
+                    className="text-slate-400 hover:text-red-500 transition ml-2 cursor-pointer"
+                    title="Remove Part"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              {/* Dimensions: L, W, H, Qty, Mode */}
-              <div className="grid grid-cols-5 gap-1.5 text-[11px]">
+              <div className="grid grid-cols-5 gap-1.5">
                 <div>
                   <label className="block text-[9px] text-slate-400">L</label>
                   <input
@@ -552,7 +566,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
               type="button"
               onClick={onLoadSample}
               className="inline-flex items-center space-x-2 px-3.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition shadow-2xs cursor-pointer"
-              title="Fills inputs with proposal sample job #4821"
+              title="Fills inputs with sample job #4821"
             >
               <Sparkles className="w-4 h-4 text-blue-600" />
               <span>{t('load_sample')}</span>
@@ -561,11 +575,12 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
 
           {/* 2-Column Responsive Body */}
           <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-            {/* Left Column: Grade, Machine, Trim/Kerf, Blocks */}
+            {/* Left Column: Customer Ref, Grade, Machine, Trim/Kerf, Blocks */}
             <div className="p-6 space-y-5">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Supply Foam Buns & Machine Routing
               </h3>
+              {renderCustomerRef()}
               {renderGradeSelector()}
               {renderMachineSelector()}
               {renderTrimAndKerf()}
@@ -627,7 +642,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
           type="button"
           onClick={onLoadSample}
           className="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition"
-          title="Fills inputs with proposal sample job #4821"
+          title="Fills inputs with sample job #4821"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>{t('load_sample')}</span>
@@ -635,6 +650,7 @@ export const SidebarInputs: React.FC<SidebarInputsProps> = ({
       </div>
 
       <div className="p-4 space-y-5 text-xs text-slate-700">
+        {renderCustomerRef()}
         {renderGradeSelector()}
         {renderMachineSelector()}
         {renderTrimAndKerf()}

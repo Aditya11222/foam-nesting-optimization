@@ -1,8 +1,8 @@
 [
   {
     "job_id": "JOB-4821",
-    "order_id": "SO-10592",
-    "customer": "Acme Bedding",
+    "order_id": null,
+    "customer": null,
     "grade": "HR-40",
     "machine_id": "saw-g2",
     "parts": [

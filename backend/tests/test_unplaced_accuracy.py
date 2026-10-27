@@ -34,7 +34,7 @@ def test_user_setup_exact_154_parts_placed(repo):
 
     req = OptimizationRequest(
         job_id="JOB-REGRESSION-154",
-        customer="Acme Bedding",
+        customer="Sample Job",
         grade="HR-40",
         machine_id="saw-g2",
         skin_trim_per_face=1.0,

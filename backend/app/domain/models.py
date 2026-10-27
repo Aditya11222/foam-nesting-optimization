@@ -271,7 +271,7 @@ class ValidationResult(BaseModel):
 class OptimizationRequest(BaseModel):
     job_id: str
     order_id: Optional[str] = None
-    customer: Optional[str] = "Acme Bedding"
+    customer: Optional[str] = None
     grade: str
     machine_id: Optional[str] = None
     parts: List[PartItem]

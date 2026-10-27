@@ -157,6 +157,8 @@ export interface UnplacedPartSummary extends PartItem {
 
 export interface OptimizationResult {
   job_id: string;
+  order_id?: string;
+  customer?: string;
   grade: string;
   algorithm_id: string;
   algorithm_name: string;
@@ -225,4 +227,55 @@ export interface RemnantAgingStatus {
   storage_location: string;
   recommendation_en: string;
   recommendation_es: string;
+}
+
+export type NavRoute = '/dashboard' | '/projects' | '/optimization' | '/inventory' | '/reports';
+
+export interface SavedJob {
+  id: string;
+  job_id: string;
+  name: string;
+  customer_ref?: string;
+  grade: string;
+  machine_id: string;
+  algorithm_id: string;
+  parts: PartItem[];
+  blocks: BlockInput[];
+  skin_trim: number;
+  kerf: number;
+  machine_objective: 'lowest_cost' | 'best_yield' | 'lowest_time';
+  allow_mixed_grades: boolean;
+  created_at: string;
+  updated_at: string;
+  last_optimized_at?: string;
+  status: 'Not optimized' | 'Optimized' | 'Stale';
+  yield_pct?: number;
+  parts_placed_count?: number;
+  parts_demanded_count?: number;
+  latest_result?: OptimizationResult | null;
+  comparison_results?: OptimizationResult[];
+}
+
+export interface RemnantInventoryItem {
+  id: string;
+  remnant_id: string;
+  grade: string;
+  length: number;
+  width: number;
+  height: number;
+  volume_cu_in: number;
+  source_job_id: string;
+  source_job_name: string;
+  created_at: string;
+  status: 'available' | 'reserved' | 'consumed';
+}
+
+export interface ActivityLogItem {
+  id: string;
+  type: 'run' | 'save' | 'create' | 'inventory';
+  title: string;
+  job_id?: string;
+  job_name?: string;
+  timestamp: string;
+  yield_pct?: number;
 }
