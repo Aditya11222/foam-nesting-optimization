@@ -5,15 +5,20 @@ import {
   BarChart2,
   AlertTriangle,
   CheckCircle2,
-  XCircle,
   Loader2,
   Layers,
-  Star,
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Info,
 } from 'lucide-react';
-import type { AlgorithmInfo, OptimizationResult, StrategyRecommendationResult } from '../types';
+import type { AlgorithmInfo, OptimizationResult, StrategyRecommendationResult, MachineProfile } from '../types';
+import {
+  isAlgorithmCompatibleWithMachine,
+  getIncompatibilityReason,
+  getRecommendedCompatibleAlgorithm,
+  getCompatibleAlgorithmsForMachine,
+} from '../services/compatibility';
 
 interface AlgorithmPlacementCardProps {
   algorithms: AlgorithmInfo[];
@@ -25,13 +30,22 @@ interface AlgorithmPlacementCardProps {
   elapsedSeconds: number;
   isStale: boolean;
   currentResult: OptimizationResult | null;
-  comparisonResults: OptimizationResult[];
-  onSelectResultFromTable: (id: string) => void;
+  comparisonResults?: OptimizationResult[];
+  onSelectResultFromTable?: (id: string) => void;
   isStrategyAuto?: boolean;
   onToggleStrategyAuto?: (isAuto: boolean) => void;
   strategyRec?: StrategyRecommendationResult | null;
   onRestoreRecommendedStrategy?: () => void;
   runningAlgorithmName?: string;
+  selectedMachine?: MachineProfile;
+  machines?: MachineProfile[];
+  onSelectMachine?: (machineId: string) => void;
+  activeTab?: 'manifest' | 'comparison';
+  onTabChange?: (tab: 'manifest' | 'comparison') => void;
+  isComparing?: boolean;
+  comparingProgress?: { current: number; total: number };
+  onCancelCompare?: () => void;
+  onCancelRun?: () => void;
 }
 
 export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
@@ -44,18 +58,43 @@ export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
   elapsedSeconds,
   isStale,
   currentResult,
-  comparisonResults,
-  onSelectResultFromTable,
   isStrategyAuto = true,
   onToggleStrategyAuto,
   strategyRec,
   onRestoreRecommendedStrategy,
   runningAlgorithmName,
+  selectedMachine,
+  machines,
+  onSelectMachine,
+  isComparing = false,
+  onCancelRun,
 }) => {
-  const [activeTab, setActiveTab] = useState<'manifest' | 'comparison'>('manifest');
   const [showUnplacedDetail, setShowUnplacedDetail] = useState<boolean>(false);
 
   const selectedAlgo = algorithms.find((a) => a.id === selectedAlgorithmId);
+
+  const compatibleAlgorithms = getCompatibleAlgorithmsForMachine(selectedMachine, algorithms);
+  const missingPackageAlgorithms = algorithms.filter((a) => a.available === false && a.id.startsWith('ortools'));
+
+  // Machine-Algorithm compatibility check
+  const isCurrentIncompatible = selectedMachine
+    ? !isAlgorithmCompatibleWithMachine(selectedAlgorithmId, selectedMachine.cut_type, algorithms)
+    : false;
+
+  const currentIncompReason = isCurrentIncompatible && selectedMachine
+    ? getIncompatibilityReason(selectedAlgorithmId, selectedMachine, algorithms)
+    : null;
+
+  const recommendedAlgoId = selectedMachine
+    ? getRecommendedCompatibleAlgorithm(selectedMachine, selectedAlgorithmId, algorithms)
+    : selectedAlgorithmId;
+
+  const recommendedAlgoName =
+    algorithms.find((a) => a.id === recommendedAlgoId)?.name || recommendedAlgoId;
+
+  const compatibleMachine = machines?.find((m) =>
+    isAlgorithmCompatibleWithMachine(selectedAlgorithmId, m.cut_type, algorithms)
+  );
 
   // Group placed parts by SKU and Block for the manifest table
   const placementRows = React.useMemo(() => {
@@ -180,32 +219,111 @@ export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
           </div>
 
           {/* Clean Select: Closed shows ONLY clean name to prevent clipping */}
-          <select
-            value={selectedAlgorithmId}
-            onChange={(e) => {
-              onSelectAlgorithm(e.target.value);
-              onToggleStrategyAuto?.(false);
-            }}
-            disabled={isOptimizing}
-            className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-2xs"
-          >
-            {algorithms.map((algo) => (
-              <option key={algo.id} value={algo.id}>
-                {algo.name} — {algo.speed_tag} | {algo.description}
-              </option>
-            ))}
-          </select>
-
-          {/* Clean Description & Speed Tag Row Below Dropdown */}
-          {selectedAlgo && (
-            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500">
-              <span className="leading-snug">{selectedAlgo.description}</span>
-              <span className="font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded text-[10px] whitespace-nowrap border border-blue-200">
-                {selectedAlgo.speed_tag}
-              </span>
+          {compatibleAlgorithms.length === 0 ? (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-[11px] block">No Compatible Strategies</span>
+                  <p className="text-[11px]">
+                    Machine &ldquo;{selectedMachine?.name}&rdquo; ({selectedMachine?.cut_type}) has 0 supported algorithms configured. Please select a compatible machine.
+                  </p>
+                </div>
+              </div>
             </div>
+          ) : (
+            <>
+              <select
+                value={selectedAlgorithmId}
+                onChange={(e) => {
+                  onSelectAlgorithm(e.target.value);
+                  onToggleStrategyAuto?.(false);
+                }}
+                disabled={isOptimizing || isComparing}
+                className={`w-full px-3 py-2 rounded-lg border text-xs font-bold focus:ring-2 focus:outline-none shadow-2xs ${
+                  isCurrentIncompatible
+                    ? 'border-amber-400 bg-amber-50/40 text-amber-900 focus:ring-amber-500'
+                    : 'border-slate-300 bg-white text-slate-800 focus:ring-blue-500'
+                }`}
+              >
+                {compatibleAlgorithms.map((algo) => (
+                  <option key={algo.id} value={algo.id}>
+                    {algo.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Muted line: Showing N strategies available with info tooltip */}
+              <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span>
+                    Showing {compatibleAlgorithms.length} {compatibleAlgorithms.length === 1 ? 'strategy' : 'strategies'} available for {selectedMachine?.name || 'machine'}.
+                  </span>
+                  <span
+                    className="inline-flex cursor-help text-slate-400 hover:text-slate-600"
+                    title="Other algorithms are omitted because they do not support this machine's cut type."
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </span>
+                </span>
+              </div>
+
+              {/* Package not installed note if OR-Tools is missing */}
+              {missingPackageAlgorithms.length > 0 && (
+                <div className="text-[10px] text-slate-500 italic mt-0.5">
+                  OR-Tools strategies unavailable: package not installed
+                </div>
+              )}
+
+              {/* Clean Description & Speed Tag Row Below Dropdown */}
+              {selectedAlgo && (
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-500">
+                  <span className="leading-snug">{selectedAlgo.description}</span>
+                  <span className="font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded text-[10px] whitespace-nowrap border border-blue-200">
+                    {selectedAlgo.speed_tag}
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {/* Incompatible Machine/Algorithm Recovery Banner */}
+        {isCurrentIncompatible && (
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs space-y-2">
+            <div className="flex items-start space-x-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-bold text-[11px] block">Incompatible Configuration</span>
+                <p className="leading-relaxed text-[11px]">
+                  Machine &ldquo;{selectedMachine?.name}&rdquo; ({selectedMachine?.cut_type}) is not compatible with algorithm &ldquo;{selectedAlgo?.name}&rdquo;.
+                  {currentIncompReason ? ` ${currentIncompReason}` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectAlgorithm(recommendedAlgoId);
+                  onToggleStrategyAuto?.(false);
+                }}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold transition cursor-pointer shadow-2xs"
+              >
+                Switch to {recommendedAlgoName}
+              </button>
+              {compatibleMachine && onSelectMachine && (
+                <button
+                  type="button"
+                  onClick={() => onSelectMachine(compatibleMachine.id)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-amber-300 text-amber-900 rounded text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                >
+                  Switch to {compatibleMachine.name}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 'Why this strategy' Card (Real Data & Measured Evidence) */}
         {strategyRec && (
@@ -270,17 +388,23 @@ export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
           <button
             type="button"
             onClick={onRunOptimization}
-            disabled={isOptimizing}
-            className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-xs font-bold text-white transition shadow-sm cursor-pointer ${
-              isOptimizing
-                ? 'bg-blue-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99]'
+            disabled={isOptimizing || isCurrentIncompatible}
+            title={isCurrentIncompatible ? currentIncompReason || 'Selected algorithm is incompatible with machine' : undefined}
+            className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-xs font-bold text-white transition shadow-sm ${
+              isOptimizing || isCurrentIncompatible
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] cursor-pointer'
             }`}
           >
             {isOptimizing ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Running ({elapsedSeconds}s)...</span>
+              </>
+            ) : isCurrentIncompatible ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                <span>Incompatible</span>
               </>
             ) : (
               <>
@@ -311,7 +435,18 @@ export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
                   Solving: {runningAlgorithmName || selectedAlgo?.name || 'Nesting Solver'}
                 </span>
               </span>
-              <span className="font-mono text-blue-700">{elapsedSeconds}s</span>
+              <div className="flex items-center space-x-2">
+                <span className="font-mono text-blue-700">{elapsedSeconds}s</span>
+                {onCancelRun && (
+                  <button
+                    type="button"
+                    onClick={onCancelRun}
+                    className="text-[10px] bg-white hover:bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded font-bold cursor-pointer transition shadow-2xs"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
             <div className="w-full bg-blue-200 h-1.5 rounded-full overflow-hidden">
               <div className="bg-blue-600 h-1.5 rounded-full w-2/3 animate-progress" />
@@ -400,149 +535,25 @@ export const AlgorithmPlacementCard: React.FC<AlgorithmPlacementCardProps> = ({
           </div>
         )}
 
-        {/* Tab Header (Placement Manifest vs Benchmark Comparison) */}
-        <div className="flex items-center justify-between border-b border-slate-200 pt-1 shrink-0">
-          <div className="flex space-x-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('manifest')}
-              className={`pb-1.5 text-xs font-bold transition cursor-pointer border-b-2 ${
-                activeTab === 'manifest'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Placement Manifest ({placementRows.length})
-            </button>
-            {comparisonResults && comparisonResults.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('comparison')}
-                className={`pb-1.5 text-xs font-bold transition cursor-pointer border-b-2 ${
-                  activeTab === 'comparison'
-                    ? 'border-blue-600 text-blue-700'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Benchmark ({comparisonResults.length})
-              </button>
-            )}
-          </div>
+        {/* Callout to Full-Width Manifest & Benchmark Section Below */}
+        <div className="pt-2 border-t border-slate-200 mt-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById('manifest-benchmark-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="w-full py-2 px-3 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-lg text-xs font-semibold text-slate-700 hover:text-blue-700 flex items-center justify-between transition cursor-pointer"
+          >
+            <div className="flex items-center space-x-2">
+              <Layers className="w-3.5 h-3.5 text-blue-600" />
+              <span>Placement Manifest & Benchmark</span>
+            </div>
+            <span className="text-[10px] text-blue-600 font-bold">
+              {placementRows.length > 0 ? `${placementRows.length} items` : 'View'} &darr;
+            </span>
+          </button>
         </div>
-
-        {/* Tab 1: Placement Data Manifest */}
-        {activeTab === 'manifest' ? (
-          <div className="flex-1 border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-slate-50/40 min-h-0">
-            <div className="overflow-y-auto flex-1 max-h-[220px]">
-              {placementRows.length > 0 ? (
-                <table className="w-full text-[11px] text-left border-collapse">
-                  <thead className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase sticky top-0 border-b border-slate-200 select-none">
-                    <tr>
-                      <th className="py-1.5 px-2.5">SKU / Part</th>
-                      <th className="py-1.5 px-1.5 text-center">Qty</th>
-                      <th className="py-1.5 px-1.5">Dim (L×W×H)</th>
-                      <th className="py-1.5 px-1.5">Block</th>
-                      <th className="py-1.5 px-2 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {placementRows.map((r) => (
-                      <tr key={r.key} className="hover:bg-slate-50/80 transition">
-                        <td className="py-1.5 px-2.5 font-semibold text-slate-800">
-                          <div className="flex items-center space-x-1.5 truncate">
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: r.color }}
-                            />
-                            <span className="truncate max-w-[85px]">{r.sku}</span>
-                          </div>
-                        </td>
-                        <td className="py-1.5 px-1.5 text-center font-bold text-slate-700">
-                          {r.qty}
-                        </td>
-                        <td className="py-1.5 px-1.5 text-[10px] text-slate-500 font-mono">
-                          {r.dims}
-                        </td>
-                        <td className="py-1.5 px-1.5 text-[10px] text-slate-600 font-medium">
-                          {r.blockId}
-                        </td>
-                        <td className="py-1.5 px-2 text-right">
-                          {r.isPlaced ? (
-                            <span className="inline-flex items-center space-x-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
-                              <CheckCircle2 className="w-2.5 h-2.5" />
-                              <span>Fit</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center space-x-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                              <XCircle className="w-2.5 h-2.5" />
-                              <span>Drop</span>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="h-full min-h-[140px] flex flex-col items-center justify-center p-4 text-center text-slate-400 text-xs">
-                  <Layers className="w-6 h-6 mb-1 text-slate-300 stroke-[1.5]" />
-                  <span>No placement data available.</span>
-                  <span className="text-[10px] text-slate-400">Click "Run Selected" above to populate manifest.</span>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Tab 2: Comparison Benchmark Table */
-          <div className="flex-1 border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white min-h-0">
-            <div className="overflow-y-auto flex-1 max-h-[220px]">
-              <table className="w-full text-xs text-left border-collapse">
-                <thead className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase sticky top-0 border-b border-slate-200">
-                  <tr>
-                    <th className="py-1.5 px-2">Algorithm</th>
-                    <th className="py-1.5 px-1.5 text-center">Net Yield</th>
-                    <th className="py-1.5 px-1.5 text-center">Cuts</th>
-                    <th className="py-1.5 px-1.5 text-right">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {comparisonResults.map((r) => {
-                    const isSelected = r.algorithm_id === selectedAlgorithmId;
-                    return (
-                      <tr
-                        key={r.algorithm_id}
-                        onClick={() => onSelectResultFromTable(r.algorithm_id)}
-                        className={`cursor-pointer transition ${
-                          isSelected
-                            ? 'bg-blue-50/90 font-bold'
-                            : 'hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <td className="py-1.5 px-2">
-                          <div className="flex items-center space-x-1.5">
-                            {r.is_best && (
-                              <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
-                            )}
-                            <span className="truncate max-w-[95px] text-[11px]">{r.algorithm_name}</span>
-                          </div>
-                        </td>
-                        <td className="py-1.5 px-1.5 text-center font-bold text-blue-700 text-[11px]">
-                          {r.net_utilization_pct.toFixed(1)}%
-                        </td>
-                        <td className="py-1.5 px-1.5 text-center text-[11px] text-slate-600">
-                          {r.total_cuts_count}
-                        </td>
-                        <td className="py-1.5 px-1.5 text-right text-[11px] font-mono text-slate-500">
-                          {(r.runtime_ms / 1000).toFixed(2)}s
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

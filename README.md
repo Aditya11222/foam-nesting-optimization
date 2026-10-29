@@ -147,8 +147,8 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
    - Labeled clearly: *"Estimated, based on demo assumptions."*
 4. **6 Light-Themed Visualizations (Recharts)**:
    - Volume Breakdown (Parts, Remnants, Scrap, Trim, Kerf in cu ft).
-   - Algorithm Benchmark Comparison (Net Yield % vs Scrap %).
-   - Baseline vs. Optimized (Buns, Material Cost, Scrap Cost, Net Cost).
+   - **Efficiency vs Baseline (<Selected Algorithm>)**: Grouped horizontal comparative bars contrasting the active heuristic against the naive simulated baseline across 5 normalized metrics (Net usable yield %, Scrap %, Blocks count, Total cuts count, Estimated saw time min). Features direct value labels, honest delta chips with explicit "worse" tags when applicable, batch efficiency score reduction %, and data-driven summary banner.
+   - **Baseline vs. Optimized Cost**: USD-only comparative grouped bar chart (Foam Cost, Scrap Cost, Saw Time, Remnant Credit, Net Cost) with comma thousands separators (`$1,845`), Y-axis titled `Cost (USD, estimated)`, real net savings chip `Net saving $X (Y%)`, strict mathematical reconciliation assertion ($\text{Foam} + \text{Saw} - \text{Credit} = \text{Net Cost} \pm \$0.01$), dynamic bun reduction footnote, and zero-credit auto-hiding.
    - Per-Block Utilization Stacked Bar (% Parts, Remnants, Kerf, Scrap).
    - Cost Component Breakdown (Raw Foam, Saw Time, Remnant Credit).
    - Machine Efficiency Trade-offs (Guillotine vs Waterjet on kerf, cut count, and time).
@@ -221,25 +221,30 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
 | **OR-Tools Pattern Selection (ORT-PATTERN)** | **Fully Implemented** | Fixed-pool column generation, exact demand satisfaction, optional overproduction flag, de-duplicated and capped. |
 | **Auto (OR-Tools) Machine Selection** | **Fully Implemented** | Station selection dropdown with configurable objective (`lowest_cost`, `best_yield`, `lowest_time`), throat height check, capacity limits. |
 | **Comprehensive OR-Tools Benchmark Suite** | **Fully Implemented** | Evaluates Job #4821, 20 synthetic jobs, multi-grade jobs, and volume-vs-geometry challenge in `docs/BENCHMARK_ORTOOLS.md`. |
+| **Algorithm-Machine Compatibility Matrix** | **Fully Implemented** | Shared config (`config/algorithm_compatibility.json`) strictly filtering strategies to only those supported by machine cut type; zero incompatible options rendered; inline switch actions; structured 422 API responses. |
+| **Visible Manifest & Benchmark (Screen 2)** | **Fully Implemented** | Full-width section below workspace cards with persistent counts `[Placement Manifest (N)]` and `[Benchmark Comparison (M)]`, sticky headers, monospace numerals, baseline reference row, and honest metric badges. |
+| **Explainable Remnant Recommendation Scoring** | **Fully Implemented** | Rule-based 0-100 score in `config/remnant_scoring_config.json` factoring 3-day aging trim (-2"/axis), 3.0" min thickness, active SKU demand fit, compactness, grade demand, freshness, and configurable demand gating; includes interactive explainability card ("How recommendations are scored") and per-remnant diagnostic breakdown panels. |
+| **Solver LRU Cache & Async Execution** | **Fully Implemented** | In-memory SHA-256 LRU cache for instant repeat solves (<3ms), async threadpool solver execution preventing event loop starvation, SA plateau early stop, and CP-SAT worker tuning. |
+| **Isolated & Progressive Compare All** | **Fully Implemented** | Independent per-algorithm execution with fallback/failure isolation, collapsible not-applicable section, and best-heuristic ranking. |
 | **Rush-Order Re-planning with Warm Start** | **Stubbed (Planned)** | Interface stubs provided in `backend/app/engine/ortools/stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
 | **Dynamic Column Generation (Gilmore-Gomory)**| **Stubbed (Planned)** | Interface stubs provided in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
 | **Multi-Job Machine Scheduling** | **Stubbed (Planned)** | Disjunctive scheduling stubs in `stubs.py`; see `docs/ORTOOLS_ROADMAP.md`. |
 | **SyteLine ERP Integration** | **Stubbed** | Interface stubs provided in `backend/app/api/stubs.py`. |
-| **ML Remnant Usability Scoring** | **Stubbed** | Rule-based volume scoring active for demo; ML stubs in `stubs.py`. |
+| **ML Remnant Usability Scoring** | **Planned Roadmap** | Rule-based explainable demo scoring active; ML historical warehouse learning model remains planned. |
 
 ---
 
 ## 8. Testing & Verification
 
-Run the full pytest suite (66 passing test cases):
+Run the full pytest suite (70 passing test cases):
 ```bash
 pytest backend/tests
 ```
 
-Run frontend unit tests:
+Run frontend unit tests (55 passing test cases across 8 test suites):
 ```bash
 cd frontend
-node --test --experimental-strip-types src/services/__tests__/recommender.test.ts src/components/__tests__/stickyActionBar.test.ts src/services/__tests__/gcode.test.ts
+npm test
 ```
 
 Build the frontend production bundle:

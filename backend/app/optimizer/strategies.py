@@ -292,6 +292,7 @@ class SimulatedAnnealingStrategy(NestingStrategy):
 
         n = len(current_seq)
         if n > 1:
+            no_improvement_count = 0
             while (time.perf_counter() - start_time < time_budget) and iteration < max_iterations:
                 iteration += 1
                 # Perturbation move
@@ -342,10 +343,19 @@ class SimulatedAnnealingStrategy(NestingStrategy):
                         best_result = cand_result
                         best_seq = list(candidate_seq)
                         best_orients = dict(candidate_orients)
+                        no_improvement_count = 0
+                    else:
+                        no_improvement_count += 1
+                else:
+                    no_improvement_count += 1
 
                 # Cool temperature
                 if iteration % 5 == 0:
                     T *= alpha
+
+                # Sliding window plateau detection: early stop when cooled and score plateaued
+                if (T < 1.0 or iteration > 60) and no_improvement_count >= 30:
+                    break
 
         # Ensure final result metadata is accurate
         best_result.algorithm_id = self.info.id

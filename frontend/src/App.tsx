@@ -26,6 +26,12 @@ import {
   ALGORITHM_DISPLAY_NAMES,
 } from './services/recommender';
 import {
+  isAlgorithmCompatibleWithMachine,
+  getIncompatibilityReason,
+  getRecommendedCompatibleAlgorithm,
+} from './services/compatibility';
+import { rankAndMarkBestResult } from './services/comparison';
+import {
   fetchGrades,
   fetchMachines,
   fetchAlgorithms,
@@ -55,12 +61,13 @@ import { SidebarInputs } from './components/SidebarInputs';
 import { AlgorithmPlacementCard } from './components/AlgorithmPlacementCard';
 import { CuttingPlanCard } from './components/CuttingPlanCard';
 import { ExecutiveSummaryCard } from './components/ExecutiveSummaryCard';
+import { Screen2ManifestBenchmark } from './components/Screen2ManifestBenchmark';
 import { DashboardStep4 } from './components/DashboardStep4';
 import { Step4Placeholder } from './components/HelperComponents';
 import { StickyActionBar } from './components/StickyActionBar';
 import { GCodeModal } from './components/GCodeModal';
 import { exportJobCSV } from './utils/csvExport';
-import { FileCode } from 'lucide-react';
+import { FileCode, Sparkles, AlertTriangle } from 'lucide-react';
 
 // Pages
 import { DashboardPage } from './components/pages/DashboardPage';
@@ -216,6 +223,8 @@ export function App() {
   const [strategyRec, setStrategyRec] = useState<StrategyRecommendationResult | null>(null);
   const [runningAlgorithmName, setRunningAlgorithmName] = useState<string>('');
   const [screen1Error, setScreen1Error] = useState<string | null>(null);
+  const [machineSwitchNotice, setMachineSwitchNotice] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<{ title: string; message: string } | null>(null);
   const lastAutoRunFingerprintRef = useRef<string>('');
 
   // G-Code Export States
@@ -227,6 +236,10 @@ export function App() {
   // Output States
   const [resultsByAlgo, setResultsByAlgo] = useState<Record<string, OptimizationResult>>({});
   const [comparisonResults, setComparisonResults] = useState<OptimizationResult[]>([]);
+  const [isComparing, setIsComparing] = useState<boolean>(false);
+  const [comparingProgress, setComparingProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [activePlacementTab, setActivePlacementTab] = useState<'manifest' | 'comparison'>('manifest');
+  const compareAbortControllerRef = useRef<AbortController | null>(null);
 
   const timerRef = useRef<any>(null);
 
@@ -343,10 +356,17 @@ export function App() {
     const m = machines.find((mach) => mach.id === newMachineId);
     if (m) {
       setKerf(m.kerf);
-      if (m.cut_type === 'free') {
-        setSelectedAlgorithmId('free_nesting_heuristic');
-      } else if (selectedAlgorithmId === 'free_nesting_heuristic') {
-        setSelectedAlgorithmId('best_fit_decreasing');
+      const isCompat = isAlgorithmCompatibleWithMachine(selectedAlgorithmId, m.cut_type, algorithms);
+      if (!isCompat) {
+        const recAlgo = getRecommendedCompatibleAlgorithm(m, selectedAlgorithmId, algorithms);
+        const prevAlgoName = ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId;
+        const newAlgoName = ALGORITHM_DISPLAY_NAMES[recAlgo] || recAlgo;
+        setSelectedAlgorithmId(recAlgo);
+        setMachineSwitchNotice(
+          `Switched algorithm from ${prevAlgoName} to ${newAlgoName} because machine "${m.name}" uses ${m.cut_type} cuts.`
+        );
+      } else {
+        setMachineSwitchNotice(null);
       }
     }
     handleInputModified();
@@ -436,6 +456,10 @@ export function App() {
     if (!val.isValid) return;
 
     const currentFingerprint = `${selectedMachineId}|${objective}|${selectedGrade}|${skinTrim}|${kerf}|${JSON.stringify(blocks)}|${JSON.stringify(parts)}`;
+    // In manual mode, changing the dropdown only changes selection and must never auto-run
+    if (!isStrategyAuto && currentFingerprint === lastAutoRunFingerprintRef.current) {
+      return;
+    }
     if (currentFingerprint === lastAutoRunFingerprintRef.current && resultsByAlgo[selectedAlgorithmId]) {
       return;
     }
@@ -494,8 +518,9 @@ export function App() {
 
         // Background comparative benchmark of all algorithms
         try {
+          if (isComparing) return;
           const compResults = await compareAlgorithms(payload);
-          if (!isMounted) return;
+          if (!isMounted || isComparing) return;
 
           setComparisonResults(compResults);
           setResultsByAlgo((prev) => {
@@ -576,15 +601,33 @@ export function App() {
     time_budget_seconds: 10.0,
   });
 
+  const runAbortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancelRun = () => {
+    if (runAbortControllerRef.current) {
+      runAbortControllerRef.current.abort();
+    }
+    setIsOptimizing(false);
+    stopTimer();
+    setRunningAlgorithmName('');
+    setGeneralError({
+      title: 'Run Cancelled',
+      message: 'Optimization was cancelled by operator.',
+    });
+  };
+
   // Action: Run Selected Algorithm
   const handleRunOptimization = async () => {
+    const controller = new AbortController();
+    runAbortControllerRef.current = controller;
     setIsOptimizing(true);
     const algoName = ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId;
     setRunningAlgorithmName(algoName);
     startTimer();
+    setGeneralError(null);
     try {
       const payload = buildPayload(selectedAlgorithmId);
-      const result = await optimizeJob(payload);
+      const result = await optimizeJob(payload, controller.signal);
 
       setResultsByAlgo((prev) => ({
         ...prev,
@@ -619,8 +662,19 @@ export function App() {
       // Log activity
       logActivity('run', `Optimized: ${jobName}`, currentJobId, jobName, result.net_utilization_pct);
       setActivityLog(getStorageData().activity);
+      setGeneralError(null);
     } catch (err: any) {
-      alert(`Optimization error: ${err.message}`);
+      if (controller.signal.aborted) {
+        setGeneralError({
+          title: 'Run Cancelled',
+          message: 'Optimization was cancelled by operator.',
+        });
+      } else {
+        setGeneralError({
+          title: 'Optimization Error',
+          message: `${err.message || 'Optimization failed to complete.'} Fallback suggestion: Try switching to First-Fit Decreasing (FFD) or adding additional stock buns.`,
+        });
+      }
     } finally {
       stopTimer();
       setIsOptimizing(false);
@@ -628,63 +682,248 @@ export function App() {
     }
   };
 
-  // Action: Compare All Algorithms
+  // Action: Compare All Algorithms (Progressive, Isolated, 15s Capped)
   const handleCompareAll = async () => {
-    setIsOptimizing(true);
-    setRunningAlgorithmName('Running Comparative Benchmark (All 6 Algorithms)...');
-    startTimer();
-    try {
-      const payload = buildPayload(selectedAlgorithmId);
-      const results = await compareAlgorithms(payload);
-
-      setComparisonResults(results);
-
-      const updatedMap = { ...resultsByAlgo };
-      results.forEach((r) => {
-        updatedMap[r.algorithm_id] = r;
-      });
-      setResultsByAlgo(updatedMap);
-
-      const activeMach = machines.find((m) => m.id === selectedMachineId);
-      const ruleRec = recommendStrategy(blocks, parts, activeMach, objective);
-      const evaluated = evaluateBestMeasuredStrategy(
-        results,
-        objective,
-        ruleRec.ruleStrategyId,
-        ruleRec.ruleReason
-      );
-
-      if (isStrategyAuto) {
-        setSelectedAlgorithmId(evaluated.finalStrategyId);
-        setStrategyRec(evaluated);
-      } else {
-        setStrategyRec({
-          ...evaluated,
-          finalStrategyId: selectedAlgorithmId,
-          finalStrategyName: ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId,
-          isSwitchedFromRule: false,
-          switchedNotice: undefined,
-        });
-      }
-
-      setIsStale(false);
-      setIs3DGenerated(true);
-      const now = new Date().toISOString();
-      setLastOptimizedAt(now);
-      setActiveStep(2);
-
-      // Log activity
-      const winner = results.find((r) => r.is_best);
-      const bestYield = winner ? winner.net_utilization_pct : undefined;
-      logActivity('run', `Compared all algorithms: ${jobName}`, currentJobId, jobName, bestYield);
-      setActivityLog(getStorageData().activity);
-    } catch (err: any) {
-      alert(`Comparison error: ${err.message}`);
-    } finally {
-      stopTimer();
-      setIsOptimizing(false);
-      setRunningAlgorithmName('');
+    if (compareAbortControllerRef.current) {
+      compareAbortControllerRef.current.abort();
     }
+    const controller = new AbortController();
+    compareAbortControllerRef.current = controller;
+
+    // Switch view to step 2 and tab to comparison immediately
+    setActiveStep(2);
+    setActivePlacementTab('comparison');
+    setIsComparing(true);
+    setRunningAlgorithmName('Running Comparative Benchmark...');
+    startTimer();
+
+    const activeMach = machines.find((m) => m.id === selectedMachineId);
+    if (!activeMach) {
+      setIsComparing(false);
+      stopTimer();
+      setRunningAlgorithmName('');
+      return;
+    }
+
+    const compatible = algorithms.filter((a) =>
+      isAlgorithmCompatibleWithMachine(a.id, activeMach.cut_type, algorithms)
+    );
+    const incompatible = algorithms.filter(
+      (a) => !isAlgorithmCompatibleWithMachine(a.id, activeMach.cut_type, algorithms)
+    );
+
+    // Initial rows: compatible pending, incompatible not applicable
+    const initialRows: OptimizationResult[] = [
+      ...compatible.map((a) => ({
+        job_id: currentJobId,
+        grade: selectedGrade,
+        algorithm_id: a.id,
+        algorithm_name: a.name,
+        solution_type: 'heuristic solution',
+        timestamp: new Date().toISOString(),
+        machine: activeMach,
+        total_parts_demanded: parts.reduce((acc, p) => acc + p.quantity, 0),
+        total_parts_placed: 0,
+        unplaced_parts: [],
+        unplaced_summary: [],
+        blocks_used_count: 0,
+        blocks: [],
+        total_gross_volume: 0,
+        total_usable_volume: 0,
+        total_parts_volume: 0,
+        total_kerf_volume: 0,
+        total_remnant_volume: 0,
+        total_unrecoverable_scrap_volume: 0,
+        gross_utilization_pct: 0,
+        net_utilization_pct: 0,
+        total_cuts_count: 0,
+        estimated_saw_time_minutes: 0,
+        runtime_ms: 0,
+        validation: { is_valid: true, errors: [], warnings: [], volume_reconciliation: { total_gross_volume: 0, total_usable_volume: 0, total_skin_trim_volume: 0, total_parts_volume: 0, total_remnants_volume: 0, total_kerf_volume: 0, total_scrap_volume: 0, reconciliation_delta: 0 } },
+        is_best: false,
+        comparison_status: 'PENDING' as const,
+      })),
+      ...incompatible.map((a) => ({
+        job_id: currentJobId,
+        grade: selectedGrade,
+        algorithm_id: a.id,
+        algorithm_name: a.name,
+        solution_type: 'not applicable',
+        timestamp: new Date().toISOString(),
+        machine: activeMach,
+        total_parts_demanded: parts.reduce((acc, p) => acc + p.quantity, 0),
+        total_parts_placed: 0,
+        unplaced_parts: [],
+        unplaced_summary: [],
+        blocks_used_count: 0,
+        blocks: [],
+        total_gross_volume: 0,
+        total_usable_volume: 0,
+        total_parts_volume: 0,
+        total_kerf_volume: 0,
+        total_remnant_volume: 0,
+        total_unrecoverable_scrap_volume: 0,
+        gross_utilization_pct: 0,
+        net_utilization_pct: 0,
+        total_cuts_count: 0,
+        estimated_saw_time_minutes: 0,
+        runtime_ms: 0,
+        validation: { is_valid: true, errors: [], warnings: [], volume_reconciliation: { total_gross_volume: 0, total_usable_volume: 0, total_skin_trim_volume: 0, total_parts_volume: 0, total_remnants_volume: 0, total_kerf_volume: 0, total_scrap_volume: 0, reconciliation_delta: 0 } },
+        is_best: false,
+        comparison_status: 'NOT_APPLICABLE' as const,
+        status_reason: getIncompatibilityReason(a.id, activeMach, algorithms) || 'Incompatible with machine cut type',
+      })),
+    ];
+
+    setComparisonResults(initialRows);
+    setComparingProgress({ current: 0, total: compatible.length });
+
+    if (compatible.length === 0) {
+      setIsComparing(false);
+      stopTimer();
+      setRunningAlgorithmName('');
+      return;
+    }
+
+    if (compatible.length === 1) {
+      // Single compatible algorithm case (Requirement 8)
+      try {
+        const payload = buildPayload(compatible[0].id);
+        const res = await optimizeJob(payload, controller.signal);
+        setResultsByAlgo((prev) => ({ ...prev, [compatible[0].id]: res }));
+        setComparisonResults([
+          { ...res, comparison_status: res.fallback_used ? 'FALLBACK' : 'COMPLETED', is_best: true },
+          ...initialRows.filter((r) => r.comparison_status === 'NOT_APPLICABLE'),
+        ]);
+        setSelectedAlgorithmId(compatible[0].id);
+      } catch (err: any) {
+        if (!controller.signal.aborted) {
+          setComparisonResults([
+            {
+              ...initialRows[0],
+              comparison_status: 'FAILED',
+              status_reason: err.message || 'Solver error',
+            },
+            ...initialRows.filter((r) => r.comparison_status === 'NOT_APPLICABLE'),
+          ]);
+        }
+      } finally {
+        setIsComparing(false);
+        stopTimer();
+        setRunningAlgorithmName('');
+      }
+      return;
+    }
+
+    // 15-second overall timeout
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 15000);
+
+    const completedResults: OptimizationResult[] = [];
+
+    try {
+      for (let i = 0; i < compatible.length; i++) {
+        if (controller.signal.aborted) break;
+        const algo = compatible[i];
+        setRunningAlgorithmName(`Solving ${algo.name} (${i + 1}/${compatible.length})...`);
+        const payload = buildPayload(algo.id);
+        payload.time_budget_seconds = Math.min(3.0, payload.time_budget_seconds || 3.0);
+
+        try {
+          const res = await optimizeJob(payload, controller.signal);
+          const compStatus = res.fallback_used ? ('FALLBACK' as const) : ('COMPLETED' as const);
+          const fullRes: OptimizationResult = { ...res, comparison_status: compStatus };
+          completedResults.push(fullRes);
+
+          setComparisonResults((prev) =>
+            prev.map((r) => (r.algorithm_id === algo.id ? fullRes : r))
+          );
+          setResultsByAlgo((prev) => ({ ...prev, [algo.id]: fullRes }));
+        } catch (err: any) {
+          const isAborted = controller.signal.aborted;
+          const status = isAborted ? 'TIMED_OUT' : 'FAILED';
+          const reason = isAborted ? 'Timed out (15 s)' : (err.message || 'Solver error');
+          setComparisonResults((prev) =>
+            prev.map((r) =>
+              r.algorithm_id === algo.id
+                ? { ...r, comparison_status: status as any, status_reason: reason }
+                : r
+            )
+          );
+        }
+
+        setComparingProgress((prev) => ({ ...prev, current: i + 1 }));
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      stopTimer();
+      setIsComparing(false);
+      setRunningAlgorithmName('');
+
+      const wasAborted = controller.signal.aborted;
+      setComparisonResults((prev) => {
+        const updated = prev.map((r) => {
+          if (r.comparison_status === 'PENDING') {
+            return {
+              ...r,
+              comparison_status: wasAborted ? ('TIMED_OUT' as const) : ('FAILED' as const),
+              status_reason: wasAborted ? 'Timed out (15 s)' : 'Incomplete',
+            };
+          }
+          return r;
+        });
+
+        return rankAndMarkBestResult(updated);
+      });
+
+      // Update strategy recommendation
+      if (completedResults.length > 0) {
+        const ruleRec = recommendStrategy(blocks, parts, activeMach, objective);
+        const evaluated = evaluateBestMeasuredStrategy(
+          completedResults,
+          objective,
+          ruleRec.ruleStrategyId,
+          ruleRec.ruleReason
+        );
+
+        if (isStrategyAuto) {
+          setSelectedAlgorithmId(evaluated.finalStrategyId);
+          setStrategyRec(evaluated);
+        } else {
+          setStrategyRec({
+            ...evaluated,
+            finalStrategyId: selectedAlgorithmId,
+            finalStrategyName: ALGORITHM_DISPLAY_NAMES[selectedAlgorithmId] || selectedAlgorithmId,
+            isSwitchedFromRule: false,
+            switchedNotice: undefined,
+          });
+        }
+        setIsStale(false);
+        setIs3DGenerated(true);
+        setLastOptimizedAt(new Date().toISOString());
+
+        const winner = completedResults.find((r) => r.is_best) || completedResults[0];
+        logActivity('run', `Compared all algorithms: ${jobName}`, currentJobId, jobName, winner?.net_utilization_pct);
+        setActivityLog(getStorageData().activity);
+      }
+    }
+  };
+
+  const handleCancelCompare = () => {
+    if (compareAbortControllerRef.current) {
+      compareAbortControllerRef.current.abort();
+    }
+    setIsComparing(false);
+    stopTimer();
+    setRunningAlgorithmName('');
+    setComparisonResults((prev) =>
+      prev.map((r) =>
+        r.comparison_status === 'PENDING'
+          ? { ...r, comparison_status: 'CANCELLED', status_reason: 'Cancelled by user' }
+          : r
+      )
+    );
   };
 
   const handleSelectAlgorithm = (id: string) => {
@@ -825,7 +1064,20 @@ export function App() {
     setCustomerRef(job.customer_ref || '');
     setSelectedGrade(job.grade);
     setSelectedMachineId(job.machine_id);
-    setSelectedAlgorithmId(job.algorithm_id);
+
+    const targetMachine = machines.find((m) => m.id === job.machine_id);
+    let targetAlgo = job.algorithm_id;
+    if (targetMachine && !isAlgorithmCompatibleWithMachine(job.algorithm_id, targetMachine.cut_type, algorithms)) {
+      targetAlgo = getRecommendedCompatibleAlgorithm(targetMachine, job.algorithm_id, algorithms);
+      const prevName = ALGORITHM_DISPLAY_NAMES[job.algorithm_id] || job.algorithm_id;
+      const newName = ALGORITHM_DISPLAY_NAMES[targetAlgo] || targetAlgo;
+      setMachineSwitchNotice(
+        `Saved job algorithm "${prevName}" is incompatible with machine "${targetMachine.name}" (${targetMachine.cut_type}). Migrated to "${newName}".`
+      );
+    } else {
+      setMachineSwitchNotice(null);
+    }
+    setSelectedAlgorithmId(targetAlgo);
     setParts(job.parts);
     setBlocks(job.blocks);
     setSkinTrim(job.skin_trim);
@@ -1016,7 +1268,10 @@ export function App() {
         setGcodeExportData(clientRes);
         setIsGCodeModalOpen(true);
       } catch (clientErr: any) {
-        alert(clientErr?.message || 'Failed to generate G-code program.');
+        setGeneralError({
+          title: 'G-Code Generation Error',
+          message: clientErr?.message || 'Failed to generate G-code program.',
+        });
       }
     } finally {
       setIsGeneratingGCode(false);
@@ -1193,6 +1448,43 @@ export function App() {
               ) : (
                 /* Steps 2-4 Workspace */
                 <div className="space-y-6 max-w-7xl mx-auto w-full">
+                  {/* Notice Banner (Machine auto-switch notification) */}
+                  {machineSwitchNotice && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900 shadow-2xs">
+                      <div className="flex items-center space-x-2">
+                        <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>{machineSwitchNotice}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMachineSwitchNotice(null)}
+                        className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {/* General Error Banner (Cream card replacing window.alert) */}
+                  {generalError && (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+                      <div className="flex items-center space-x-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div>
+                          <strong className="font-bold">{generalError.title}: </strong>
+                          <span>{generalError.message}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setGeneralError(null)}
+                        className="px-2.5 py-1 bg-amber-200/80 hover:bg-amber-300 text-amber-900 rounded text-[11px] font-bold transition cursor-pointer"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
                   {/* 1.5 Three-Card Workspace: Equal Height Side-by-Side (30% / 40% / 30%) */}
                   <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 items-stretch w-full">
                     {/* Left Card: Algorithm & Placement (30% width) */}
@@ -1219,6 +1511,15 @@ export function App() {
                           }
                         }}
                         runningAlgorithmName={runningAlgorithmName}
+                        selectedMachine={selectedMachine}
+                        machines={machines}
+                        onSelectMachine={handleSelectMachine}
+                        activeTab={activePlacementTab}
+                        onTabChange={setActivePlacementTab}
+                        isComparing={isComparing}
+                        comparingProgress={comparingProgress}
+                        onCancelCompare={handleCancelCompare}
+                        onCancelRun={handleCancelRun}
                       />
                     </div>
 
@@ -1249,12 +1550,32 @@ export function App() {
                     </div>
                   </div>
 
+                  {/* 1.55 Full-Width Placement Manifest & Benchmark Section (Screen 2) */}
+                  <div id="manifest-benchmark-section" className="w-full">
+                    <Screen2ManifestBenchmark
+                      currentResult={currentResult}
+                      comparisonResults={comparisonResults}
+                      selectedAlgorithmId={selectedAlgorithmId}
+                      onSelectResultFromTable={handleSelectResultFromTable}
+                      onRunCompareAll={handleCompareAll}
+                      isComparing={isComparing}
+                      comparingProgress={comparingProgress}
+                      onCancelCompare={handleCancelCompare}
+                      isOptimizing={isOptimizing}
+                      isStale={isStale}
+                      selectedMachine={selectedMachine}
+                      algorithms={algorithms}
+                    />
+                  </div>
+
                   {/* 1.6 Step 4 Detailed Analytics Section (Full width below the cards) */}
                   <div id="step4-section" className="pt-2">
                     {currentResult ? (
                       <DashboardStep4
                         currentResult={currentResult}
                         comparisonResults={comparisonResults}
+                        isStale={isStale}
+                        onRunOptimization={handleRunOptimization}
                         onGoToCutSteps={() => {
                           setActiveStep(3);
                           window.scrollTo({ top: 0, behavior: 'smooth' });

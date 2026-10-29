@@ -102,6 +102,36 @@ def test_api_optimize_rejects_incompatible_machine():
     assert "not compatible" in res.json()["detail"].lower()
 
 
+def test_api_optimize_algorithm_machine_mismatch_structured_422():
+    payload = {
+        "job_id": "API-TEST-MISMATCH-422",
+        "grade": "HR-40",
+        "machine_id": "saw-g1",
+        "algorithm_id": "free_nesting_heuristic",
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Seat",
+                "name": "Seat",
+                "grade": "HR-40",
+                "length": 20.0,
+                "width": 20.0,
+                "height": 5.0,
+                "quantity": 1
+            }
+        ]
+    }
+    res = client.post("/api/optimize", json=payload, headers={"x-client": "web"})
+    assert res.status_code == 422
+    data = res.json()["detail"]
+    assert data["code"] == "ALGORITHM_MACHINE_INCOMPATIBLE"
+    assert data["machine_id"] == "saw-g1"
+    assert data["algorithm_id"] == "free_nesting_heuristic"
+    assert "free" in data["supported_cut_types"]
+    assert len(data["suggested_algorithms"]) > 0
+    assert "best_fit_decreasing" in data["suggested_algorithms"]
+
+
 def test_api_optimize_waterjet_clearance_limit_exceeded():
     payload = {
         "job_id": "API-TEST-CLEARANCE",
@@ -203,4 +233,120 @@ def test_api_gcode_export_manual_machine_rejected():
     assert gcode_res.status_code == 400
     assert "manual" in gcode_res.json()["detail"].lower()
     assert "does not support g-code" in gcode_res.json()["detail"].lower()
+
+
+def test_api_compare_guillotine_machine_marks_free_as_not_applicable():
+    payload = {
+        "job_id": "API-COMPARE-G2",
+        "grade": "HR-40",
+        "machine_id": "saw-g2",
+        "time_budget_seconds": 0.5,
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Seat",
+                "name": "Seat",
+                "grade": "HR-40",
+                "length": 20.0,
+                "width": 20.0,
+                "height": 5.0,
+                "quantity": 2
+            }
+        ]
+    }
+    res = client.post("/api/optimize/compare", json=payload)
+    assert res.status_code == 200
+    results = res.json()
+    assert len(results) >= 6
+
+    # Verify free nesting is marked NOT_APPLICABLE
+    free_result = next((r for r in results if r["algorithm_id"] == "free_nesting_heuristic"), None)
+    assert free_result is not None
+    assert free_result["comparison_status"] == "NOT_APPLICABLE"
+    assert "requires" in free_result["status_reason"].lower()
+
+    # Verify compatible ones completed
+    bfd = next((r for r in results if r["algorithm_id"] == "best_fit_decreasing"), None)
+    assert bfd is not None
+    assert bfd["comparison_status"] in ("COMPLETED", "FALLBACK")
+    assert bfd["total_parts_placed"] == 2
+
+    # Verify exactly one is_best
+    best_results = [r for r in results if r["is_best"] is True]
+    assert len(best_results) == 1
+    assert best_results[0]["comparison_status"] in ("COMPLETED", "FALLBACK")
+
+
+def test_api_compare_waterjet_clearance_failure_never_returns_500():
+    payload = {
+        "job_id": "API-COMPARE-WJ",
+        "grade": "HR-40",
+        "machine_id": "saw-wj",
+        "time_budget_seconds": 0.5,
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Large-Cushion",
+                "name": "Large Cushion",
+                "grade": "HR-40",
+                "length": 60.0,  # forces bun allocation which exceeds 36" throat limit
+                "width": 30.0,
+                "height": 10.0,
+                "quantity": 5
+            }
+        ]
+    }
+    res = client.post("/api/optimize/compare", json=payload)
+    assert res.status_code == 200  # Must NOT be 500!
+    results = res.json()
+
+    # Free nesting failed gracefully
+    free_res = next((r for r in results if r["algorithm_id"] == "free_nesting_heuristic"), None)
+    assert free_res is not None
+    assert free_res["comparison_status"] == "FAILED"
+    assert "throat" in free_res["status_reason"].lower() or "clearance" in free_res["status_reason"].lower()
+
+    # Guillotine algorithms are marked NOT_APPLICABLE
+    bfd = next((r for r in results if r["algorithm_id"] == "best_fit_decreasing"), None)
+    assert bfd is not None
+    assert bfd["comparison_status"] == "NOT_APPLICABLE"
+
+
+def test_api_optimize_cache_hit_returns_instantaneously():
+    payload = {
+        "job_id": "API-CACHE-TEST-1",
+        "grade": "HR-40",
+        "machine_id": "saw-g1",
+        "algorithm_id": "best_fit_decreasing",
+        "parts": [
+            {
+                "id": "p-1",
+                "sku": "Cache-Cushion",
+                "name": "Cache Cushion",
+                "grade": "HR-40",
+                "length": 18.0,
+                "width": 18.0,
+                "height": 4.0,
+                "quantity": 2
+            }
+        ]
+    }
+    # First call: computes and caches
+    res1 = client.post("/api/optimize", json=payload)
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["cached"] is False or data1["cached"] is None
+
+    # Second call with new job_id but identical problem parameters:
+    payload2 = dict(payload)
+    payload2["job_id"] = "API-CACHE-TEST-2"
+    res2 = client.post("/api/optimize", json=payload2)
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["job_id"] == "API-CACHE-TEST-2"
+    assert data2["cached"] is True
+    assert data2["runtime_ms"] < 50.0  # Instantaneous cache lookup (<5ms typical)
+    assert data2["net_utilization_pct"] == data1["net_utilization_pct"]
+
+
 

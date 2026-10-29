@@ -9,10 +9,21 @@ export interface FoamGrade {
   description?: string;
 }
 
+export type MachineCutType = 'guillotine' | 'free';
+
+export interface IncompatibleAlgorithmMachineError {
+  code: 'ALGORITHM_MACHINE_INCOMPATIBLE';
+  machine_id: string;
+  algorithm_id: string;
+  supported_cut_types: string[];
+  suggested_algorithms: string[];
+  detail?: string;
+}
+
 export interface MachineProfile {
   id: string;
   name: string;
-  cut_type: 'guillotine' | 'free';
+  cut_type: MachineCutType;
   max_cut_height: number;
   kerf: number;
   automation: 'manual' | 'rotating' | 'CNC';
@@ -262,7 +273,20 @@ export interface OptimizationResult {
   verify_iterations?: number;
   fallback_used?: boolean;
   machine_assignment_reason?: string;
+  comparison_status?: ComparisonStatus;
+  status_reason?: string;
+  cached?: boolean;
 }
+
+export type ComparisonStatus =
+  | 'COMPLETED'
+  | 'PENDING'
+  | 'NOT_APPLICABLE'
+  | 'FAILED'
+  | 'TIMED_OUT'
+  | 'FALLBACK'
+  | 'CANCELLED';
+
 
 export interface OptimizationRequest {
   job_id: string;

@@ -213,9 +213,11 @@ class OrtBlockAssignmentStrategy(NestingStrategy):
         time_limit = min(request.time_budget_seconds, 10.0)
         start_solve_time = time.perf_counter()
 
+        import os
+        workers = min(4, max(1, os.cpu_count() or 2))
         solver = cp_mod.CpSolver()
-        solver.parameters.max_time_in_seconds = max(1.0, min(3.0, time_limit / MAX_ITERATIONS))
-        solver.parameters.num_search_workers = 1
+        solver.parameters.num_search_workers = workers
+        solver.parameters.relative_gap_limit = 0.02
         solver.parameters.random_seed = request.seed
 
         verified_blocks: List[BlockLayout] = []
@@ -225,6 +227,13 @@ class OrtBlockAssignmentStrategy(NestingStrategy):
         fallback_used = False
 
         for iteration in range(1, MAX_ITERATIONS + 1):
+            elapsed = time.perf_counter() - start_solve_time
+            remaining_time = time_limit - elapsed
+            if remaining_time <= 0.15:
+                # Strictly respect overall time budget
+                break
+            solver.parameters.max_time_in_seconds = max(0.5, min(2.5, remaining_time))
+
             iteration_count = iteration
             status = solver.Solve(model)
             final_status_code = status

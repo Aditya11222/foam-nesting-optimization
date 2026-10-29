@@ -13,7 +13,10 @@ import {
   Layers,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Info,
+  Sparkles,
+  Star,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -24,9 +27,14 @@ import {
   Tooltip,
   Legend,
   Cell,
-  CartesianGrid
+  CartesianGrid,
+  LabelList,
 } from 'recharts';
-import type { OptimizationResult, RemnantOutput } from '../types';
+import type { OptimizationResult, RemnantOutput, PartItem } from '../types';
+import { groupAndRankRemnants } from '../services/remnantScoring';
+import { computeEfficiencyVsBaseline } from '../services/efficiencyBaseline';
+import { computeCostReconciliation, formatCurrencyShort } from '../services/costReconciliation';
+import { RemnantScoringExplanationBlock } from './RemnantScoringExplanationBlock';
 
 interface DashboardStep4Props {
   currentResult: OptimizationResult;
@@ -35,6 +43,8 @@ interface DashboardStep4Props {
   onExportCSV: () => void;
   onAddRemnantToInventory?: (remnant: any) => void;
   onAddAllRemnantsToInventory?: (remnants: any[]) => void;
+  isStale?: boolean;
+  onRunOptimization?: () => void;
 }
 
 const CU_FT_IN_CU_IN = 1728.0;
@@ -47,11 +57,13 @@ const DEFAULT_COST_BY_GRADE: Record<string, number> = {
 
 export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   currentResult,
-  comparisonResults,
+  comparisonResults: _comparisonResults,
   onGoToCutSteps,
   onExportCSV,
   onAddRemnantToInventory,
   onAddAllRemnantsToInventory,
+  isStale = false,
+  onRunOptimization,
 }) => {
   const [savedRemnantCodes, setSavedRemnantCodes] = useState<Set<string>>(new Set());
   const { t, i18n } = useTranslation();
@@ -78,6 +90,8 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
     });
     return init;
   });
+
+  const [selectedRemnantCodeForBreakdown, setSelectedRemnantCodeForBreakdown] = useState<string | null>(null);
 
   const handleUpdateTracking = (
     blockIndex: number,
@@ -116,6 +130,7 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
     baselineBlocks,
     baselineGrossCuFt,
     baselineScrapCuFt,
+    baselineSawHours,
     baselineTotalCost,
     costSavedTotal,
     costSavedPct,
@@ -195,58 +210,74 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
     { name: isEs ? 'Kerf' : 'Kerf Loss', cuFt: Number(optKerfCuFt.toFixed(2)), fill: '#8B5CF6' },
   ], [optPartsCuFt, optRemnantsCuFt, optScrapCuFt, optTrimCuFt, optKerfCuFt, isEs]);
 
-  // Chart 2: Algorithm Comparison (if available, or active vs baseline)
-  const algoComparisonData = useMemo(() => {
-    if (comparisonResults && comparisonResults.length > 0) {
-      return comparisonResults.map((r) => {
-        const rGrossCuFt = r.total_gross_volume / CU_FT_IN_CU_IN;
-        const rSawHours = r.estimated_saw_time_minutes / 60.0;
-        const rRemnantCuFt = r.total_remnant_volume / CU_FT_IN_CU_IN;
-        const rCost = (rGrossCuFt * unitCost) + (rSawHours * sawRatePerHour) - (rRemnantCuFt * unitCost * (remnantCreditPct / 100.0));
-        return {
-          name: r.algorithm_id === 'best_fit_decreasing'
-            ? 'BFD'
-            : r.algorithm_id === 'first_fit_decreasing'
-            ? 'FFD'
-            : r.algorithm_id === 'simulated_annealing'
-            ? 'SA'
-            : 'Waterjet',
-          netYield: r.net_utilization_pct,
-          scrapPct: Number(((r.total_unrecoverable_scrap_volume / Math.max(1, r.total_usable_volume)) * 100).toFixed(1)),
-          cost: Math.round(rCost),
-          isCurrent: r.algorithm_id === currentResult.algorithm_id
-        };
-      });
-    }
-    return [
-      { name: isEs ? 'Línea Base' : 'Baseline', netYield: 41.2, scrapPct: 58.8, cost: Math.round(baselineTotalCost) },
-      { name: currentResult.algorithm_name.slice(0, 10), netYield: currentResult.net_utilization_pct, scrapPct: Number(((optScrapCuFt / Math.max(0.1, optGrossCuFt)) * 100).toFixed(1)), cost: Math.round(optNetJobCost), isCurrent: true }
-    ];
-  }, [comparisonResults, currentResult, unitCost, sawRatePerHour, remnantCreditPct, baselineTotalCost, optGrossCuFt, optScrapCuFt, optNetJobCost, isEs]);
+  // Chart 2: Efficiency vs Baseline Report
+  const efficiencyReport = useMemo(() => {
+    return computeEfficiencyVsBaseline(
+      currentResult,
+      baselineGrossCuFt,
+      baselineScrapCuFt,
+      baselineBlocks,
+      baselineSawHours,
+      baselineTotalCost,
+      optNetJobCost,
+      optGrossCuFt,
+      optScrapCuFt
+    );
+  }, [
+    currentResult,
+    baselineGrossCuFt,
+    baselineScrapCuFt,
+    baselineBlocks,
+    baselineSawHours,
+    baselineTotalCost,
+    optNetJobCost,
+    optGrossCuFt,
+    optScrapCuFt,
+  ]);
 
-  // Chart 3: Baseline vs. Optimized
-  const baselineVsOptimizedData = useMemo(() => [
-    {
-      metric: isEs ? 'Bloques (u)' : 'Buns (qty)',
-      Baseline: baselineBlocks,
-      Optimized: currentResult.blocks_used_count
-    },
-    {
-      metric: isEs ? 'Material ($)' : 'Foam Cost ($)',
-      Baseline: Math.round(baselineGrossCuFt * unitCost),
-      Optimized: Math.round(optMaterialCost)
-    },
-    {
-      metric: isEs ? 'Desperdicio ($)' : 'Scrap Cost ($)',
-      Baseline: Math.round(baselineScrapCuFt * unitCost),
-      Optimized: Math.round(optScrapCuFt * unitCost)
-    },
-    {
-      metric: isEs ? 'Costo Neto ($)' : 'Net Cost ($)',
-      Baseline: Math.round(baselineTotalCost),
-      Optimized: Math.round(optNetJobCost)
-    }
-  ], [baselineBlocks, currentResult, baselineGrossCuFt, unitCost, optMaterialCost, baselineScrapCuFt, optScrapCuFt, baselineTotalCost, optNetJobCost, isEs]);
+  // Chart 3: Cost Reconciliation & Baseline vs. Optimized (USD Only)
+  const costReport = useMemo(() => {
+    return computeCostReconciliation(
+      unitCost,
+      sawRatePerHour,
+      baselineGrossCuFt,
+      baselineScrapCuFt,
+      baselineBlocks,
+      baselineSawHours,
+      baselineTotalCost,
+      optScrapCuFt,
+      optMaterialCost,
+      optSawCost,
+      optRemnantCredit,
+      optNetJobCost,
+      currentResult.blocks_used_count
+    );
+  }, [
+    unitCost,
+    sawRatePerHour,
+    baselineGrossCuFt,
+    baselineScrapCuFt,
+    baselineBlocks,
+    baselineSawHours,
+    baselineTotalCost,
+    optScrapCuFt,
+    optMaterialCost,
+    optSawCost,
+    optRemnantCredit,
+    optNetJobCost,
+    currentResult.blocks_used_count,
+  ]);
+
+  const baselineVsOptimizedData = useMemo(() => {
+    return costReport.categories.map((c) => ({
+      category: isEs ? c.categoryEs : c.category,
+      Baseline: c.baseline,
+      Optimized: c.optimized,
+      baselineFormatted: formatCurrencyShort(c.baseline),
+      optimizedFormatted: formatCurrencyShort(c.optimized),
+      deltaFormatted: c.deltaDisplay,
+    }));
+  }, [costReport, isEs]);
 
   // Chart 4: Per-Block Utilization
   const perBlockData = useMemo(() => {
@@ -290,6 +321,55 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   const allRemnants: RemnantOutput[] = useMemo(() => {
     return currentResult.blocks.flatMap((b) => b.usable_remnants);
   }, [currentResult.blocks]);
+
+  // Active parts for remnant demand fitting
+  const activeDemandParts: PartItem[] = useMemo(() => {
+    const parts: PartItem[] = [];
+    currentResult.blocks.forEach((b) => {
+      b.placed_parts.forEach((p) => {
+        parts.push({
+          id: p.part_id,
+          sku: p.sku,
+          name: p.name,
+          length: p.length,
+          width: p.width,
+          height: p.height,
+          quantity: 1,
+          grade: p.grade,
+          orientation_mode: 'any',
+        });
+      });
+    });
+    if (currentResult.unplaced_parts) {
+      currentResult.unplaced_parts.forEach((u) => {
+        parts.push({
+          id: u.sku,
+          sku: u.sku,
+          name: u.name,
+          length: u.length,
+          width: u.width,
+          height: u.height,
+          quantity: u.unplaced_qty,
+          grade: u.grade || currentResult.grade || 'HR-40',
+          orientation_mode: 'any',
+        });
+      });
+    }
+    return parts;
+  }, [currentResult]);
+
+  // Grouped and ranked remnants
+  const groupedRemnants = useMemo(() => {
+    return groupAndRankRemnants(allRemnants, activeDemandParts);
+  }, [allRemnants, activeDemandParts]);
+
+  const recommendedCredit = useMemo(() => {
+    return (
+      groupedRemnants.recommendedTotals.volumeCuFt *
+      unitCost *
+      (remnantCreditPct / 100.0)
+    );
+  }, [groupedRemnants.recommendedTotals.volumeCuFt, unitCost, remnantCreditPct]);
 
   return (
     <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
@@ -586,63 +666,200 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
           </p>
         </div>
 
-        {/* Chart 2: Algorithm Benchmark Comparison */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-indigo-500" />
-              <span>Algorithm Comparison (%)</span>
-            </span>
-            <span className="text-[10px] font-mono text-slate-400">Yield vs Scrap</span>
+        {/* Chart 2: Efficiency vs Baseline (<Selected Algorithm Name>) */}
+        <div className={`p-4 rounded-xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between ${isStale ? 'opacity-80 ring-1 ring-amber-300' : ''}`}>
+          <div>
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-800" />
+                <span className="text-xs font-bold text-slate-800">
+                  {isEs ? 'Eficiencia vs Línea Base' : 'Efficiency vs Baseline'} ({efficiencyReport.algorithmName})
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-help ${
+                    efficiencyReport.efficiencyScorePct > 0
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : efficiencyReport.efficiencyScorePct < 0
+                      ? 'bg-rose-50 text-rose-800 border-rose-300'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                  title={efficiencyReport.efficiencyScoreTooltip}
+                >
+                  Efficiency: {efficiencyReport.efficiencyScoreDisplay} [estimated]
+                </span>
+              </div>
+            </div>
+
+            {/* Stale Warning Banner if Stale */}
+            {isStale && (
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 flex items-center justify-between">
+                <span>Inputs modified — re-run to refresh baseline efficiency.</span>
+                {onRunOptimization && (
+                  <button
+                    type="button"
+                    onClick={onRunOptimization}
+                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-[10px] cursor-pointer"
+                  >
+                    Re-run
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Data-Driven Summary Line */}
+            <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-700 leading-snug flex items-start space-x-2">
+              <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span>{efficiencyReport.summaryText}</span>
+                {efficiencyReport.hasUnplaced && (
+                  <div className="text-[10px] font-semibold text-amber-800">
+                    Note: {efficiencyReport.unplacedCount} of {efficiencyReport.demandedCount} parts unplaced — yield calculated on placed parts only.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 5 Comparison Metric Rows */}
+            <div className="space-y-2 pt-2.5">
+              {efficiencyReport.metrics.map((m) => (
+                <div key={m.key} className="space-y-0.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-slate-700">{m.label}</span>
+                    <span
+                      className={`font-mono text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                        m.isImprovement
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : m.isWorse
+                          ? 'bg-rose-50 text-rose-800 border-rose-300'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {m.deltaDisplay}
+                    </span>
+                  </div>
+
+                  {/* Horizontal Proportional Bars */}
+                  <div className="space-y-1">
+                    {/* Baseline Bar */}
+                    <div className="flex items-center space-x-2 text-[10px]">
+                      <span className="w-14 text-slate-400 font-medium truncate">Baseline</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden flex items-center">
+                        <div
+                          className="bg-[#A8A29E] h-full rounded-full transition-all duration-300"
+                          style={{ width: `${Math.max(5, Math.min(100, m.baselineRatio * 100))}%` }}
+                        />
+                      </div>
+                      <span className="w-16 font-mono text-slate-600 text-right font-medium text-[10.5px]">
+                        {m.baselineDisplay}
+                      </span>
+                    </div>
+
+                    {/* Selected Bar */}
+                    <div className="flex items-center space-x-2 text-[10px]">
+                      <span className="w-14 text-amber-950 font-bold truncate">Selected</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden flex items-center">
+                        <div
+                          className="bg-[#78350F] h-full rounded-full transition-all duration-300"
+                          style={{ width: `${Math.max(5, Math.min(100, m.selectedRatio * 100))}%` }}
+                        />
+                      </div>
+                      <span className="w-16 font-mono text-amber-950 font-bold text-right text-[10.5px]">
+                        {m.selectedDisplay}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={algoComparisonData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                <Tooltip
-                  formatter={(val: any, name: any) => [`${val}%`, name === 'netYield' ? 'Net Yield' : 'Scrap Rate']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
-                />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar dataKey="netYield" name={isEs ? 'Rendimiento Neto' : 'Net Yield'} fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="scrapPct" name={isEs ? 'Desperdicio' : 'Scrap %'} fill="#EF4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+
+          {/* Legend and Footnote */}
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1.5 mt-2">
+            <div className="flex items-center space-x-3">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#A8A29E]" />
+                <span>Baseline (simulated layout)</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#78350F]" />
+                <span className="font-semibold text-slate-700">Selected ({efficiencyReport.algorithmName})</span>
+              </span>
+            </div>
+            <span className="italic text-slate-400">Real calculated values</span>
           </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            FFD preserves largest contiguous 3D remnant boxes on multi-part jobs
-          </p>
         </div>
 
-        {/* Chart 3: Baseline vs. Optimized */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>Baseline vs. Optimized</span>
-            </span>
-            <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-              Heuristic delta
-            </span>
+        {/* Chart 3: Baseline vs. Optimized Cost */}
+        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between">
+          <div>
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
+              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>{isEs ? 'Línea Base vs. Optimizado' : 'Baseline vs. Optimized'}</span>
+              </span>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
+                {costReport.savingsChipText}
+              </span>
+            </div>
+
+            {/* Reconciliation Warning (if discrepancy detected) */}
+            {!costReport.isFullyReconciled && (
+              <div className="mt-2 p-2 bg-rose-50 border border-rose-300 rounded text-xs text-rose-800 font-semibold">
+                {costReport.reconciliationError}
+              </div>
+            )}
+
+            {/* Zero Remnant Credit Notice if hidden */}
+            {!costReport.hasRemnantCredit && (
+              <div className="mt-1 text-[10px] text-slate-400 italic">
+                * {isEs ? 'Sin crédito por remanentes' : 'No remnant credit'} ({isEs ? 'remanentes minimizados o bajo umbral de retención' : 'all off-cuts minimized or below retention threshold'}).
+              </div>
+            )}
+
+            <div className="h-60 min-h-[240px] mt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={baselineVsOptimizedData} margin={{ top: 20, right: 10, left: 15, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis
+                    dataKey="category"
+                    tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }}
+                    interval={0}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#64748B' }}
+                    tickFormatter={(val: number) => `$${val.toLocaleString()}`}
+                    label={{
+                      value: isEs ? 'Coste (USD, estimado)' : 'Cost (USD, estimated)',
+                      angle: -90,
+                      position: 'insideLeft',
+                      offset: 0,
+                      style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B', fontWeight: 500 }
+                    }}
+                  />
+                  <Tooltip
+                    formatter={(val: any, name: any) => [formatCurrencyShort(Number(val)), name]}
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Bar dataKey="Baseline" fill="#A8A29E" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="baselineFormatted" position="top" style={{ fontSize: 9, fontWeight: 700, fill: '#64748B' }} />
+                  </Bar>
+                  <Bar dataKey="Optimized" fill="#10B981" radius={[4, 4, 0, 0]}>
+                    <LabelList dataKey="optimizedFormatted" position="top" style={{ fontSize: 9, fontWeight: 700, fill: '#047857' }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={baselineVsOptimizedData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="metric" tick={{ fontSize: 9, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }} />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar dataKey="Baseline" fill="#94A3B8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Optimized" fill="#10B981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+
+          {/* Footnote with Data-Driven Bun Text */}
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1.5">
+            <span className="font-medium text-slate-700">{costReport.bunReductionText}</span>
+            <span className="italic text-slate-400">{costReport.disclaimerText}</span>
           </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            Reduces {baselineBlocks - currentResult.blocks_used_count} full raw foam bun(s)
-          </p>
         </div>
 
         {/* Chart 4: Per-Block Utilization Stacked */}
@@ -856,17 +1073,56 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
         </div>
       </div>
 
-      {/* Recorded Usable Remnants Table */}
+      {/* Recorded Usable Remnants Table (Recommended First) */}
       <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 pb-3 gap-2">
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-2">
             <Layers className="w-4 h-4 text-emerald-600" />
             <span>{t('remnants_recorded')} ({allRemnants.length})</span>
           </h3>
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              Total Remnant Recovery: {optRemnantsCuFt.toFixed(1)} ft³ (${Math.round(optRemnantCredit)} Credit)
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-700 font-semibold bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs">
+              Total Recovery: {optRemnantsCuFt.toFixed(1)} ft³ (${Math.round(optRemnantCredit)} Credit)
             </span>
+            <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-300 shadow-2xs flex items-center space-x-1">
+              <Sparkles className="w-3 h-3 text-emerald-600" />
+              <span>
+                Recommended: {groupedRemnants.recommendedTotals.count} pcs,{' '}
+                {groupedRemnants.recommendedTotals.volumeCuFt.toFixed(1)} ft³ (${Math.round(recommendedCredit)} Credit) [est]
+              </span>
+            </span>
+
+            {/* Extra button: Add Recommended Only */}
+            {groupedRemnants.recommended.length > 0 && onAddAllRemnantsToInventory && (
+              <button
+                type="button"
+                onClick={() => {
+                  const items = groupedRemnants.recommended.map((sr) => {
+                    const r = sr.remnant;
+                    return {
+                      id: `rem-${Date.now().toString().slice(-6)}-${r.code}`,
+                      remnant_id: r.code,
+                      grade: r.grade,
+                      length: r.length,
+                      width: r.width,
+                      height: r.height,
+                      volume_cu_in: r.volume,
+                      source_job_id: currentResult.job_id,
+                      source_job_name: currentResult.job_id,
+                      created_at: new Date().toISOString(),
+                      status: 'available' as const,
+                    };
+                  });
+                  onAddAllRemnantsToInventory(items);
+                  setSavedRemnantCodes((prev) => new Set([...prev, ...groupedRemnants.recommended.map((sr) => sr.remnant.code)]));
+                }}
+                className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded transition cursor-pointer shadow-2xs"
+              >
+                + Add Recommended Only ({groupedRemnants.recommended.length})
+              </button>
+            )}
+
+            {/* Existing button: Add All to Inventory */}
             {allRemnants.length > 0 && onAddAllRemnantsToInventory && (
               <button
                 type="button"
@@ -887,7 +1143,7 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
                   onAddAllRemnantsToInventory(items);
                   setSavedRemnantCodes(new Set(allRemnants.map((r) => r.code)));
                 }}
-                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition cursor-pointer"
+                className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded transition cursor-pointer shadow-2xs"
               >
                 + Add All to Inventory
               </button>
@@ -900,38 +1156,183 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
             No large remnants generated for retention (all scrap minimized below threshold volume).
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs bg-white rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
-              <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-left text-xs bg-white border-collapse min-w-[900px]">
+              <thead className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200 sticky top-0 select-none">
                 <tr>
                   <th className="py-2.5 px-3">Remnant ID</th>
-                  <th className="py-2.5 px-3">Grade</th>
-                  <th className="py-2.5 px-3">Dimensions (L × W × H)</th>
-                  <th className="py-2.5 px-3 text-right">Volume</th>
+                  <th className="py-2.5 px-2">Grade</th>
+                  <th className="py-2.5 px-3 font-mono">Actual Dims (L×W×H)</th>
+                  <th className="py-2.5 px-3 font-mono">Post-Aging (3d)</th>
+                  <th className="py-2.5 px-2 text-right">Volume</th>
                   <th className="py-2.5 px-3 text-center">Usability Score</th>
-                  <th className="py-2.5 px-3">Warehouse Bay</th>
+                  <th className="py-2.5 px-3">Why (Explainable Factor)</th>
+                  <th className="py-2.5 px-2">Bay</th>
                   <th className="py-2.5 px-3 text-center">Inventory Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {allRemnants.map((r) => {
-                  const volCuFt = (r.volume / CU_FT_IN_CU_IN).toFixed(2);
-                  return (
-                    <tr key={r.id} className="hover:bg-slate-50/80 transition">
-                      <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">{r.code}</td>
-                      <td className="py-2.5 px-3 font-medium text-slate-600">{r.grade}</td>
-                      <td className="py-2.5 px-3 font-mono text-[11px]">
-                        {r.length}" × {r.width}" × {r.height}"
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-medium text-slate-800">{volCuFt} ft³</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {Math.round(r.usability_score * 100)}% usable
+                {/* 1. Group Header: RECOMMENDED TO ADD */}
+                {groupedRemnants.recommended.length > 0 && (
+                  <tr className="bg-emerald-50/80 border-y border-emerald-200 select-none">
+                    <td colSpan={9} className="py-2 px-3">
+                      <div className="flex items-center space-x-2 text-emerald-900 font-bold text-xs uppercase tracking-wide">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Recommended to Add ({groupedRemnants.recommended.length})</span>
+                        <span className="text-[10px] font-normal lowercase text-emerald-700">
+                          — score &ge; 50 &amp; matches demand after 3-day aging trim (-2&quot; per axis)
                         </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {groupedRemnants.recommended.map((sr) => {
+                  const r = sr.remnant;
+                  const volCuFt = (r.volume / CU_FT_IN_CU_IN).toFixed(2);
+                  const isSaved = savedRemnantCodes.has(r.code);
+                  const tooltipText = `Factor Breakdown:\n• Aging Usable Volume: ${sr.factorBreakdown.agingUsableVolume}%\n• Min Useful Size: ${sr.factorBreakdown.minimumUsefulSize}%\n• Demand Fit: ${sr.factorBreakdown.demandFit}% (${sr.fitPartCount}/${sr.totalPartTypes} SKUs)\n• Compactness: ${sr.factorBreakdown.compactness}%\n• Grade Demand: ${sr.factorBreakdown.gradeDemand}%\n• Freshness: ${sr.factorBreakdown.freshness}%`;
+
+                  return (
+                    <tr key={r.id} className="bg-emerald-50/20 hover:bg-emerald-50/40 transition">
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
+                        <div className="flex items-center space-x-1.5">
+                          <span>{r.code}</span>
+                          <span className="inline-flex items-center text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded-full">
+                            Recommended
+                          </span>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-3 font-medium text-slate-600">{r.storage_location || 'Bay R-04'}</td>
+                      <td className="py-2.5 px-2 font-medium text-slate-700">{r.grade}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-800 whitespace-nowrap">
+                        {r.length}&quot; × {r.width}&quot; × {r.height}&quot;
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-emerald-800 whitespace-nowrap font-medium">
+                        {sr.effectiveDims[0].toFixed(1)}&quot; × {sr.effectiveDims[1].toFixed(1)}&quot; × {sr.effectiveDims[2].toFixed(1)}&quot;
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-medium text-slate-800 whitespace-nowrap">
+                        {volCuFt} ft³
+                      </td>
                       <td className="py-2.5 px-3 text-center">
-                        {savedRemnantCodes.has(r.code) ? (
+                        <div className="flex flex-col items-center space-y-0.5">
+                          <span
+                            title={tooltipText}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-help shadow-2xs"
+                          >
+                            <Star className="w-2.5 h-2.5 fill-emerald-600 text-emerald-700" />
+                            <span>{sr.compositeScore}/100</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRemnantCodeForBreakdown(r.code)}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 underline decoration-dotted font-medium cursor-pointer"
+                            aria-label={`View score breakdown for ${r.code}`}
+                          >
+                            {isEs ? 'Ver desglose' : 'Score breakdown'}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px] text-slate-600 max-w-xs leading-snug">
+                        {sr.reason}
+                      </td>
+                      <td className="py-2.5 px-2 font-medium text-slate-600 text-[11px] whitespace-nowrap">
+                        {r.storage_location || 'Bay R-04'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {isSaved ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>In Inventory</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAddRemnantToInventory?.({
+                                id: `rem-${Date.now().toString().slice(-6)}-${r.code}`,
+                                remnant_id: r.code,
+                                grade: r.grade,
+                                length: r.length,
+                                width: r.width,
+                                height: r.height,
+                                volume_cu_in: r.volume,
+                                source_job_id: currentResult.job_id,
+                                source_job_name: currentResult.job_id,
+                                created_at: new Date().toISOString(),
+                                status: 'available',
+                              });
+                              setSavedRemnantCodes((prev) => new Set([...prev, r.code]));
+                            }}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition cursor-pointer"
+                          >
+                            <span>+ Add to Inventory</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* 2. Group Header: LOW PRIORITY */}
+                {groupedRemnants.lowPriority.length > 0 && (
+                  <tr className="bg-slate-100/90 border-y border-slate-200 select-none">
+                    <td colSpan={9} className="py-2 px-3">
+                      <div className="flex items-center space-x-2 text-slate-700 font-bold text-xs uppercase tracking-wide">
+                        <Layers className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Low Priority ({groupedRemnants.lowPriority.length})</span>
+                        <span className="text-[10px] font-normal lowercase text-slate-500">
+                          — usable piece but narrow aspect ratio or lower demand fit
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {groupedRemnants.lowPriority.map((sr) => {
+                  const r = sr.remnant;
+                  const volCuFt = (r.volume / CU_FT_IN_CU_IN).toFixed(2);
+                  const isSaved = savedRemnantCodes.has(r.code);
+                  const tooltipText = `Factor Breakdown:\n• Aging Usable Volume: ${sr.factorBreakdown.agingUsableVolume}%\n• Min Useful Size: ${sr.factorBreakdown.minimumUsefulSize}%\n• Demand Fit: ${sr.factorBreakdown.demandFit}% (${sr.fitPartCount}/${sr.totalPartTypes} SKUs)\n• Compactness: ${sr.factorBreakdown.compactness}%\n• Grade Demand: ${sr.factorBreakdown.gradeDemand}%\n• Freshness: ${sr.factorBreakdown.freshness}%`;
+
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50 transition">
+                      <td className="py-2.5 px-3 font-mono font-medium text-slate-800">
+                        {r.code}
+                      </td>
+                      <td className="py-2.5 px-2 font-medium text-slate-600">{r.grade}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                        {r.length}&quot; × {r.width}&quot; × {r.height}&quot;
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                        {sr.effectiveDims[0].toFixed(1)}&quot; × {sr.effectiveDims[1].toFixed(1)}&quot; × {sr.effectiveDims[2].toFixed(1)}&quot;
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-medium text-slate-700 whitespace-nowrap">
+                        {volCuFt} ft³
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex flex-col items-center space-y-0.5">
+                          <span
+                            title={tooltipText}
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 cursor-help"
+                          >
+                            {sr.compositeScore}/100
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRemnantCodeForBreakdown(r.code)}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 underline decoration-dotted font-medium cursor-pointer"
+                            aria-label={`View score breakdown for ${r.code}`}
+                          >
+                            {isEs ? 'Ver desglose' : 'Score breakdown'}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px] text-slate-500 max-w-xs leading-snug">
+                        {sr.reason}
+                      </td>
+                      <td className="py-2.5 px-2 font-medium text-slate-500 text-[11px] whitespace-nowrap">
+                        {r.storage_location || 'Bay R-04'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {isSaved ? (
                           <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>In Inventory</span>
@@ -951,11 +1352,105 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
                                 source_job_id: currentResult.job_id,
                                 source_job_name: currentResult.job_id,
                                 created_at: new Date().toISOString(),
-                                status: 'available'
+                                status: 'available',
                               });
                               setSavedRemnantCodes((prev) => new Set([...prev, r.code]));
                             }}
-                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition cursor-pointer"
+                          >
+                            <span>+ Add to Inventory</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* 3. Group Header: NOT REUSABLE */}
+                {groupedRemnants.notReusable.length > 0 && (
+                  <tr className="bg-amber-50/70 border-y border-amber-200 select-none">
+                    <td colSpan={9} className="py-2 px-3">
+                      <div className="flex items-center space-x-2 text-amber-900 font-bold text-xs uppercase tracking-wide">
+                        <Layers className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Not Reusable ({groupedRemnants.notReusable.length})</span>
+                        <span className="text-[10px] font-normal lowercase text-amber-700">
+                          — thickness &lt; 3.0&quot; or dimension &le; 0&quot; after 3-day aging oxidation loss
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {groupedRemnants.notReusable.map((sr) => {
+                  const r = sr.remnant;
+                  const volCuFt = (r.volume / CU_FT_IN_CU_IN).toFixed(2);
+                  const isSaved = savedRemnantCodes.has(r.code);
+                  const tooltipText = `Factor Breakdown:\n• Aging Usable Volume: ${sr.factorBreakdown.agingUsableVolume}%\n• Min Useful Size: ${sr.factorBreakdown.minimumUsefulSize}%\n• Demand Fit: ${sr.factorBreakdown.demandFit}% (${sr.fitPartCount}/${sr.totalPartTypes} SKUs)\n• Compactness: ${sr.factorBreakdown.compactness}%\n• Grade Demand: ${sr.factorBreakdown.gradeDemand}%\n• Freshness: ${sr.factorBreakdown.freshness}%`;
+
+                  return (
+                    <tr key={r.id} className="bg-amber-50/20 hover:bg-amber-50/30 text-slate-500 transition">
+                      <td className="py-2.5 px-3 font-mono font-medium text-slate-600">
+                        {r.code}
+                      </td>
+                      <td className="py-2.5 px-2 text-slate-500">{r.grade}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                        {r.length}&quot; × {r.width}&quot; × {r.height}&quot;
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-amber-700 whitespace-nowrap">
+                        {sr.effectiveDims[0].toFixed(1)}&quot; × {sr.effectiveDims[1].toFixed(1)}&quot; × {sr.effectiveDims[2].toFixed(1)}&quot;
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-slate-500 whitespace-nowrap">
+                        {volCuFt} ft³
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex flex-col items-center space-y-0.5">
+                          <span
+                            title={tooltipText}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 cursor-help"
+                          >
+                            {sr.compositeScore}/100
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRemnantCodeForBreakdown(r.code)}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 underline decoration-dotted font-medium cursor-pointer"
+                            aria-label={`View score breakdown for ${r.code}`}
+                          >
+                            {isEs ? 'Ver desglose' : 'Score breakdown'}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[11px] text-amber-800 max-w-xs leading-snug">
+                        {sr.reason}
+                      </td>
+                      <td className="py-2.5 px-2 text-slate-400 text-[11px] whitespace-nowrap">
+                        {r.storage_location || 'Bay R-04'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        {isSaved ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>In Inventory</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAddRemnantToInventory?.({
+                                id: `rem-${Date.now().toString().slice(-6)}-${r.code}`,
+                                remnant_id: r.code,
+                                grade: r.grade,
+                                length: r.length,
+                                width: r.width,
+                                height: r.height,
+                                volume_cu_in: r.volume,
+                                source_job_id: currentResult.job_id,
+                                source_job_name: currentResult.job_id,
+                                created_at: new Date().toISOString(),
+                                status: 'available',
+                              });
+                              setSavedRemnantCodes((prev) => new Set([...prev, r.code]));
+                            }}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium bg-white hover:bg-slate-100 text-slate-500 border border-slate-200 transition cursor-pointer"
                           >
                             <span>+ Add to Inventory</span>
                           </button>
@@ -968,7 +1463,24 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
             </table>
           </div>
         )}
+
+        {/* Honest Recommendation Heuristic Disclaimer Note */}
+        <div className="pt-2 text-[11px] text-slate-500 flex items-start space-x-1.5">
+          <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+          <span>
+            <strong>Demo Heuristic:</strong> Recommendation score is an explainable rule-based heuristic, not learned from production history. Production oxidation aging models and ML-based scoring remain planned items.
+          </span>
+        </div>
       </div>
+
+      {/* How Recommendations Are Scored (Explainability Block) */}
+      <RemnantScoringExplanationBlock
+        scoredRemnants={groupedRemnants.allScored}
+        activeParts={activeDemandParts}
+        isStale={isStale}
+        selectedRemnantCode={selectedRemnantCodeForBreakdown}
+        onCloseBreakdown={() => setSelectedRemnantCodeForBreakdown(null)}
+      />
     </section>
   );
 };

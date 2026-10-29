@@ -6,9 +6,23 @@ import type {
   AlgorithmInfo,
   RemnantAgingStatus,
   GCodeExportResponse,
+  IncompatibleAlgorithmMachineError,
 } from './types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:8000/api');
+export class OptimizationApiError extends Error {
+  status: number;
+  incompatibleData?: IncompatibleAlgorithmMachineError;
+
+  constructor(message: string, status: number, incompatibleData?: IncompatibleAlgorithmMachineError) {
+    super(message);
+    this.name = 'OptimizationApiError';
+    this.status = status;
+    this.incompatibleData = incompatibleData;
+  }
+}
+
+const env = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+const API_BASE = env?.VITE_API_BASE_URL || (env?.PROD ? '/api' : 'http://localhost:8000/api');
 
 export async function fetchGrades(): Promise<FoamGrade[]> {
   const res = await fetch(`${API_BASE}/grades`);
@@ -40,24 +54,41 @@ export async function fetchRemnantAging(): Promise<RemnantAgingStatus[]> {
   return res.json();
 }
 
-export async function optimizeJob(payload: OptimizationRequest): Promise<OptimizationResult> {
+export async function optimizeJob(payload: OptimizationRequest, signal?: AbortSignal): Promise<OptimizationResult> {
   const res = await fetch(`${API_BASE}/optimize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Client': 'web' },
     body: JSON.stringify(payload),
+    signal,
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || 'Optimization failed');
+    if (
+      res.status === 422 &&
+      errorData.detail &&
+      typeof errorData.detail === 'object' &&
+      errorData.detail.code === 'ALGORITHM_MACHINE_INCOMPATIBLE'
+    ) {
+      throw new OptimizationApiError(
+        errorData.detail.message || 'Selected machine and algorithm are incompatible.',
+        422,
+        errorData.detail as IncompatibleAlgorithmMachineError
+      );
+    }
+    const message = typeof errorData.detail === 'string'
+      ? errorData.detail
+      : (errorData.detail?.message || 'Optimization failed');
+    throw new OptimizationApiError(message, res.status);
   }
   return res.json();
 }
 
-export async function compareAlgorithms(payload: OptimizationRequest): Promise<OptimizationResult[]> {
+export async function compareAlgorithms(payload: OptimizationRequest, signal?: AbortSignal): Promise<OptimizationResult[]> {
   const res = await fetch(`${API_BASE}/optimize/compare`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal,
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));

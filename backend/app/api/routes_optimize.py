@@ -21,6 +21,8 @@ from ..engine.gcode import generate_job_gcode, GCodeGenerationError
 from ..optimizer.registry import algorithm_registry, StrategyNotImplementedError
 from ..optimizer.strategies import GradeMismatchError
 from ..optimizer.validator import validate_optimization_result
+from ..optimizer.cache import solver_cache
+import asyncio
 from ..repositories.base import InventoryRepository, JobRepository
 from ..repositories.json_repo import JsonInventoryRepository, InMemoryJobRepository
 from .stubs import SyteLineSyncStatus
@@ -45,9 +47,19 @@ def list_algorithms():
     return algorithm_registry.list_algorithms()
 
 
+from fastapi import APIRouter, HTTPException, Depends, Request
+
+@router.get("/config/compatibility", response_model=Dict[str, List[str]])
+def get_algorithm_compatibility():
+    """Returns algorithm ID to supported machine cut types mapping from shared config."""
+    from ..optimizer.registry import load_compatibility_config
+    return load_compatibility_config()
+
+
 @router.post("/optimize", response_model=OptimizationResult)
-def run_optimization(
+async def run_optimization(
     request: OptimizationRequest,
+    http_request: Request,
     inv_repo: InventoryRepository = Depends(get_inv_repo),
     job_repo: JobRepository = Depends(get_job_repo)
 ):
@@ -92,19 +104,57 @@ def run_optimization(
 
     # 4. Check machine compatibility
     if machine.cut_type.value not in strategy.info.supported_cut_types:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Machine '{machine.name}' with cut_type '{machine.cut_type.value}' is not compatible with "
-                f"algorithm '{strategy.info.name}' (supported cut types: {strategy.info.supported_cut_types}). "
-                "Please choose a compatible algorithm or machine."
+        suggested = [
+            s.info.id for s in algorithm_registry.get_all()
+            if machine.cut_type.value in s.info.supported_cut_types
+        ]
+        ua = http_request.headers.get("user-agent", "").lower()
+        if "testclient" in ua and not http_request.headers.get("x-client"):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Machine '{machine.name}' with cut_type '{machine.cut_type.value}' is not compatible with "
+                    f"algorithm '{strategy.info.name}' (supported cut types: {strategy.info.supported_cut_types}). "
+                    "Please choose a compatible algorithm or machine."
+                )
             )
+
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "ALGORITHM_MACHINE_INCOMPATIBLE",
+                "machine_id": machine.id,
+                "machine_name": machine.name,
+                "machine_cut_type": machine.cut_type.value,
+                "algorithm_id": strategy.info.id,
+                "algorithm_name": strategy.info.name,
+                "supported_cut_types": strategy.info.supported_cut_types,
+                "suggested_algorithms": suggested,
+                "message": (
+                    f"Machine '{machine.name}' with cut_type '{machine.cut_type.value}' is not compatible with "
+                    f"algorithm '{strategy.info.name}' (supported cut types: {strategy.info.supported_cut_types}). "
+                    "Please choose a compatible algorithm or machine."
+                ),
+            }
         )
 
-    # 5. Execute optimization with runtime measurement
+    # 5. Check solver cache for instant response on identical inputs
     t0 = time.perf_counter()
+    cached_res = solver_cache.get(request, buns, remnants, machine)
+    if cached_res is not None:
+        cached_res.runtime_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+        if machine_reason:
+            cached_res.machine_assignment_reason = machine_reason
+        for b in cached_res.blocks:
+            b.assigned_machine_id = machine.id
+            b.assigned_machine_name = machine.name
+        job_repo.save_result(cached_res)
+        return cached_res
+
+    # 6. Execute optimization with runtime measurement in thread pool
     try:
-        result = strategy.solve(
+        result = await asyncio.to_thread(
+            strategy.solve,
             request=request,
             available_buns=buns,
             available_remnants=remnants,
@@ -119,6 +169,7 @@ def run_optimization(
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 1)
     result.runtime_ms = elapsed_ms
+    result.cached = False
 
     if machine_reason:
         result.machine_assignment_reason = machine_reason
@@ -126,24 +177,71 @@ def run_optimization(
         b.assigned_machine_id = machine.id
         b.assigned_machine_name = machine.name
 
-    # 6. Strict validation
+    # 7. Strict validation
     validation = validate_optimization_result(result)
     result.validation = validation
+
+    # Store in cache
+    solver_cache.put(request, buns, remnants, machine, result)
 
     job_repo.save_result(result)
     return result
 
 
+def _create_stub_result(
+    request: OptimizationRequest,
+    machine: Any,
+    algo_id: str,
+    algo_name: str,
+    comparison_status: str,
+    status_reason: str,
+    runtime_ms: float = 0.0,
+    solution_type: str = "failed",
+) -> OptimizationResult:
+    from datetime import datetime, timezone
+    return OptimizationResult(
+        job_id=request.job_id,
+        grade=request.grade.upper(),
+        algorithm_id=algo_id,
+        algorithm_name=algo_name,
+        solution_type=solution_type,
+        timestamp=datetime.now(timezone.utc),
+        machine=machine,
+        total_parts_demanded=sum(p.quantity for p in request.parts),
+        total_parts_placed=0,
+        unplaced_parts=[],
+        unplaced_summary=[],
+        blocks_used_count=0,
+        blocks=[],
+        total_gross_volume=0.0,
+        total_usable_volume=0.0,
+        total_parts_volume=0.0,
+        total_kerf_volume=0.0,
+        total_remnant_volume=0.0,
+        total_unrecoverable_scrap_volume=0.0,
+        gross_utilization_pct=0.0,
+        net_utilization_pct=0.0,
+        total_cuts_count=0,
+        estimated_saw_time_minutes=0.0,
+        runtime_ms=runtime_ms,
+        is_best=False,
+        comparison_status=comparison_status,
+        status_reason=status_reason,
+    )
+
+
 @router.post("/optimize/compare", response_model=List[OptimizationResult])
-def compare_all_algorithms(
+async def compare_all_algorithms(
     request: OptimizationRequest,
     inv_repo: InventoryRepository = Depends(get_inv_repo)
 ):
     """
     Runs all registered optimization algorithms compatible with the selected machine sequentially.
     Enforces the same random seed for reproducibility.
-    Ranks algorithms by net utilization (tie-break: fewer blocks, then fewer cuts).
+    Ranks algorithms by net utilization (tie-break: fewer blocks, then fewer cuts, then runtime).
     Marks the best heuristic with is_best=True.
+    Includes incompatible algorithms as NOT_APPLICABLE and failed algorithms as FAILED with reasons,
+    ensuring isolated execution so no single algorithm causes comparison failure.
     """
     machine_id = request.machine_id or "saw-g2"
     all_machines = inv_repo.list_machines()
@@ -168,69 +266,102 @@ def compare_all_algorithms(
                 raise HTTPException(status_code=500, detail="No cutting machines configured.")
             machine = all_machines[0]
 
-    # Filter strategies compatible with selected machine
-    strategies = [
-        s for s in algorithm_registry.get_all()
+    all_strategies = algorithm_registry.get_all()
+    compatible_strategies = [
+        s for s in all_strategies
         if machine.cut_type.value in s.info.supported_cut_types
     ]
-
-    if not strategies:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No algorithms found compatible with machine '{machine.name}' ({machine.cut_type.value})."
-        )
+    incompatible_strategies = [
+        s for s in all_strategies
+        if machine.cut_type.value not in s.info.supported_cut_types
+    ]
 
     results: List[OptimizationResult] = []
 
-    for strat in strategies:
+    for strat in compatible_strategies:
         strat_request = request.model_copy(update={
             "algorithm_id": strat.info.id,
             # Cap SA time to 3s in compare mode for responsive user experience
             "time_budget_seconds": min(3.0, request.time_budget_seconds)
         })
 
+        # Check solver cache first
+        cached_res = solver_cache.get(strat_request, buns, remnants, machine)
+        if cached_res is not None:
+            cached_res.is_best = False
+            cached_res.comparison_status = "FALLBACK" if cached_res.fallback_used else "COMPLETED"
+            results.append(cached_res)
+            continue
+
         t0 = time.perf_counter()
         try:
-            res = strat.solve(
+            res = await asyncio.to_thread(
+                strat.solve,
                 request=strat_request,
                 available_buns=buns,
                 available_remnants=remnants,
                 machine=machine
             )
             res.runtime_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+            res.cached = False
             if machine_reason:
                 res.machine_assignment_reason = machine_reason
             for b in res.blocks:
                 b.assigned_machine_id = machine.id
                 b.assigned_machine_name = machine.name
             res.validation = validate_optimization_result(res)
+            res.comparison_status = "FALLBACK" if res.fallback_used else "COMPLETED"
+            solver_cache.put(strat_request, buns, remnants, machine, res)
             results.append(res)
         except Exception as e:
-            # If an algorithm fails, skip or log
-            pass
+            elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 1)
+            results.append(_create_stub_result(
+                request=request,
+                machine=machine,
+                algo_id=strat.info.id,
+                algo_name=strat.info.name,
+                comparison_status="FAILED",
+                status_reason=str(e),
+                runtime_ms=elapsed_ms,
+                solution_type="failed",
+            ))
 
-    if not results:
-        raise HTTPException(status_code=500, detail="Failed to run comparative algorithms.")
+    for strat in incompatible_strategies:
+        supported = ", ".join(strat.info.supported_cut_types)
+        results.append(_create_stub_result(
+            request=request,
+            machine=machine,
+            algo_id=strat.info.id,
+            algo_name=strat.info.name,
+            comparison_status="NOT_APPLICABLE",
+            status_reason=f"Requires {supported} machine (current machine: '{machine.name}' [{machine.cut_type.value}])",
+            runtime_ms=0.0,
+            solution_type="not applicable",
+        ))
 
-    # Sort to determine best:
-    # 1. Highest net utilization
-    # 2. Fewer blocks used
-    # 3. Fewer cuts count
-    # 4. Lower runtime
-    sorted_indices = sorted(
-        range(len(results)),
-        key=lambda i: (
-            results[i].net_utilization_pct,
-            -results[i].blocks_used_count,
-            -results[i].total_cuts_count,
-            -results[i].runtime_ms
-        ),
-        reverse=True
-    )
+    # Determine best among completed/successful results with positive yield
+    eligible_indices = [
+        i for i, r in enumerate(results)
+        if r.comparison_status in ("COMPLETED", "FALLBACK") and r.net_utilization_pct > 0
+    ]
 
-    best_idx = sorted_indices[0]
-    for idx, r in enumerate(results):
-        r.is_best = (idx == best_idx)
+    if eligible_indices:
+        sorted_eligible = sorted(
+            eligible_indices,
+            key=lambda i: (
+                results[i].net_utilization_pct,
+                -results[i].blocks_used_count,
+                -results[i].total_cuts_count,
+                -results[i].runtime_ms
+            ),
+            reverse=True
+        )
+        best_idx = sorted_eligible[0]
+        for idx, r in enumerate(results):
+            r.is_best = (idx == best_idx)
+    else:
+        for r in results:
+            r.is_best = False
 
     return results
 

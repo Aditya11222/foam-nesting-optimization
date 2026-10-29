@@ -209,6 +209,9 @@ export const ExecutiveSummaryCard: React.FC<ExecutiveSummaryCardProps> = ({
                 <span className="font-extrabold text-slate-800 flex items-center justify-center space-x-0.5">
                   <Clock className="w-3 h-3 text-slate-400" />
                   <span>{(currentResult.runtime_ms / 1000).toFixed(2)}s</span>
+                  {currentResult.cached && (
+                    <span className="ml-1 text-[9px] bg-emerald-100 text-emerald-800 font-medium px-1 rounded border border-emerald-200">Cached</span>
+                  )}
                 </span>
               </div>
 

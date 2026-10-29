@@ -1,0 +1,18 @@
+{
+  "aging_days_default": 3,
+  "aging_trim_per_face_inches": 1.0,
+  "minimum_useful_thickness_inches": 3.0,
+  "minimum_useful_plan_area_sq_inches": 100.0,
+  "recommended_score_threshold": 50.0,
+  "low_priority_score_threshold": 20.0,
+  "require_demand_match_for_recommended": true,
+  "factor_weights": {
+    "aging_usable_volume": 0.25,
+    "minimum_useful_size": 0.20,
+    "demand_fit": 0.25,
+    "compactness": 0.10,
+    "grade_demand": 0.10,
+    "freshness": 0.10
+  }
+}
+

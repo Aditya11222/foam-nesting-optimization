@@ -227,7 +227,43 @@ const resources = {
       gcode_copy: "Copy",
       gcode_sim_pass: "Sim Pass",
       gcode_sim_fail: "Sim Fail",
-      gcode_exported_badge: "G-code exported {{date}}"
+      gcode_exported_badge: "G-code exported {{date}}",
+      
+      // Placement Manifest & Benchmark
+      placement_manifest: "Placement Manifest",
+      benchmark_comparison: "Benchmark Comparison",
+      best_overall: "Best overall",
+      highest_yield: "Highest yield",
+      lowest_cost: "Lowest cost",
+      fastest: "Fastest",
+      efficiency_pts_per_sec: "Efficiency (pts/s)",
+      run_compare_all_action: "Run Compare All to Benchmark",
+      single_compatible_machine_note: "Only 1 algorithm compatible with this machine; cross-algorithm comparison is not applicable.",
+      
+      // Usable Remnants
+      add_recommended_only: "+ Add Recommended Only",
+      recommended_to_add: "Recommended to Add",
+      low_priority: "Low Priority",
+      not_reusable: "Not Reusable",
+      in_inventory: "In Inventory",
+      remnant_scoring_disclaimer: "Recommendation score is an explainable rule-based demo heuristic, not learned from production history.",
+      score_breakdown_btn: "Score breakdown",
+      score_breakdown_title: "Detailed Score Breakdown",
+      close_breakdown_btn: "Close Breakdown",
+      how_recommendations_scored_title: "How Recommendations Are Scored",
+      hide_details: "Hide Details",
+      show_details: "Show Details",
+
+      // Efficiency vs Baseline & Cost Reconciliation Charts
+      chart_efficiency_vs_baseline_title: "Efficiency vs Baseline ({{algorithm}})",
+      chart_efficiency_score_label: "Efficiency Score",
+      chart_efficiency_score_tooltip: "Batch efficiency score: reduction in estimated net batch cost versus naive simulated baseline ((Baseline Cost - Opt Cost) / Baseline Cost × 100)",
+      chart_cost_components_title: "Baseline vs. Optimized",
+      chart_cost_yaxis_title: "Cost (USD, estimated)",
+      chart_savings_chip: "Net saving {{amount}} ({{percent}}%)",
+      chart_no_remnant_credit_note: "No remnant credit",
+      chart_cost_reconciliation_warning: "Reconciliation Warning: Foam + Saw - Remnant Credit does not equal Net Cost within $0.01",
+      chart_baseline_simulated_disclaimer: "Estimated, demo assumptions. Baseline is simulated."
     }
   },
   es: {
@@ -457,7 +493,43 @@ const resources = {
       gcode_copy: "Copiar [revisión]",
       gcode_sim_pass: "Sim Aprobada [revisión]",
       gcode_sim_fail: "Sim Fallida [revisión]",
-      gcode_exported_badge: "G-code exportado {{date}} [revisión]"
+      gcode_exported_badge: "G-code exportado {{date}} [revisión]",
+      
+      // Placement Manifest & Benchmark
+      placement_manifest: "Manifiesto de Ubicación [revisión]",
+      benchmark_comparison: "Comparación de Rendimiento Heurístico [revisión]",
+      best_overall: "Mejor en general [revisión]",
+      highest_yield: "Mayor rendimiento [revisión]",
+      lowest_cost: "Menor costo [revisión]",
+      fastest: "Más rápido [revisión]",
+      efficiency_pts_per_sec: "Eficiencia (pts/s) [revisión]",
+      run_compare_all_action: "Ejecutar Comparación Completa [revisión]",
+      single_compatible_machine_note: "Solo 1 algoritmo compatible con esta máquina; comparación no aplicable [revisión]",
+      
+      // Usable Remnants
+      add_recommended_only: "+ Añadir Solo Recomendados [revisión]",
+      recommended_to_add: "Recomendados para Añadir [revisión]",
+      low_priority: "Baja Prioridad [revisión]",
+      not_reusable: "No Reutilizable [revisión]",
+      in_inventory: "En Inventario [revisión]",
+      remnant_scoring_disclaimer: "La puntuación de recomendación es una heurística explicable de demostración basada en reglas, no aprendida de historial de producción. [revisión]",
+      score_breakdown_btn: "Ver desglose [revisión]",
+      score_breakdown_title: "Desglose Detallado de Puntuación [revisión]",
+      close_breakdown_btn: "Cerrar Desglose [revisión]",
+      how_recommendations_scored_title: "Cómo se Califican las Recomendaciones [revisión]",
+      hide_details: "Ocultar Detalles [revisión]",
+      show_details: "Ver Detalles [revisión]",
+
+      // Efficiency vs Baseline & Cost Reconciliation Charts
+      chart_efficiency_vs_baseline_title: "Eficiencia vs Línea Base ({{algorithm}}) [revisión]",
+      chart_efficiency_score_label: "Puntuación de Eficiencia [revisión]",
+      chart_efficiency_score_tooltip: "Puntuación de eficiencia del lote: reducción del coste neto estimado frente a la línea base simulada ((Coste Base - Coste Opt) / Coste Base × 100) [revisión]",
+      chart_cost_components_title: "Línea Base vs. Optimizado [revisión]",
+      chart_cost_yaxis_title: "Coste (USD, estimado) [revisión]",
+      chart_savings_chip: "Ahorro neto {{amount}} ({{percent}}%) [revisión]",
+      chart_no_remnant_credit_note: "Sin crédito por remanentes [revisión]",
+      chart_cost_reconciliation_warning: "Aviso de Conciliación: Espuma + Sierra - Crédito no coincide con el Coste Neto dentro de $0.01 [revisión]",
+      chart_baseline_simulated_disclaimer: "Estimado, supuestos de demostración. La línea base es simulada. [revisión]"
     }
   }
 };

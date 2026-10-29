@@ -312,21 +312,21 @@ class OptimizationResult(BaseModel):
     timestamp: datetime
     machine: MachineProfile
     total_parts_demanded: int
-    total_parts_placed: int
+    total_parts_placed: int = 0
     unplaced_parts: List[UnplacedPartSummary] = []
     unplaced_summary: List[UnplacedPartSummary] = []
-    blocks_used_count: int
-    blocks: List[BlockLayout]
-    total_gross_volume: float
-    total_usable_volume: float
-    total_parts_volume: float
-    total_kerf_volume: float
-    total_remnant_volume: float
-    total_unrecoverable_scrap_volume: float
-    gross_utilization_pct: float
-    net_utilization_pct: float
-    total_cuts_count: int
-    estimated_saw_time_minutes: float
+    blocks_used_count: int = 0
+    blocks: List[BlockLayout] = Field(default_factory=list)
+    total_gross_volume: float = 0.0
+    total_usable_volume: float = 0.0
+    total_parts_volume: float = 0.0
+    total_kerf_volume: float = 0.0
+    total_remnant_volume: float = 0.0
+    total_unrecoverable_scrap_volume: float = 0.0
+    gross_utilization_pct: float = 0.0
+    net_utilization_pct: float = 0.0
+    total_cuts_count: int = 0
+    estimated_saw_time_minutes: float = 0.0
     runtime_ms: float = 0.0
     validation: ValidationResult = Field(default_factory=ValidationResult)
     is_best: bool = False
@@ -335,6 +335,9 @@ class OptimizationResult(BaseModel):
     verify_iterations: Optional[int] = None
     fallback_used: Optional[bool] = None
     machine_assignment_reason: Optional[str] = None
+    comparison_status: Optional[str] = "COMPLETED"
+    status_reason: Optional[str] = None
+    cached: Optional[bool] = False
 
 
 class GCodeFilePayload(BaseModel):

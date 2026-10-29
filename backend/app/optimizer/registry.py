@@ -4,6 +4,8 @@ Maintains backward compatibility for machine cut types (guillotine vs free),
 and provides AlgorithmRegistry for nesting algorithms (BFD, FFD, SA, Free Nesting).
 """
 
+import json
+from pathlib import Path
 from typing import Dict, Any, Callable, List
 from ..domain.models import MachineCutType, MachineProfile, AlgorithmInfo
 from .strategies import (
@@ -15,6 +17,30 @@ from .strategies import (
 from .free_nesting import FreeNestingStrategy
 from ..engine.ortools.block_assignment import OrtBlockAssignmentStrategy
 from ..engine.ortools.pattern_selection import OrtPatternSelectionStrategy
+
+
+def load_compatibility_config() -> Dict[str, List[str]]:
+    """Loads shared algorithm compatibility configuration from config/algorithm_compatibility.json."""
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent.parent / "config" / "algorithm_compatibility.json",
+        Path(__file__).resolve().parent.parent.parent / "config" / "algorithm_compatibility.json",
+        Path.cwd() / "config" / "algorithm_compatibility.json",
+    ]
+    for c in candidates:
+        if c.exists():
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return {
+        "best_fit_decreasing": ["guillotine"],
+        "first_fit_decreasing": ["guillotine"],
+        "simulated_annealing": ["guillotine"],
+        "ortools_block_assignment": ["guillotine"],
+        "ortools_pattern_selection": ["guillotine"],
+        "free_nesting_heuristic": ["free"],
+    }
 
 
 class StrategyNotImplementedError(NotImplementedError):
@@ -43,12 +69,19 @@ class AlgorithmRegistry:
         self._register_defaults()
 
     def _register_defaults(self):
-        self.register(BestFitDecreasingStrategy())
-        self.register(FirstFitDecreasingStrategy())
-        self.register(SimulatedAnnealingStrategy())
-        self.register(FreeNestingStrategy())
-        self.register(OrtBlockAssignmentStrategy())
-        self.register(OrtPatternSelectionStrategy())
+        compat = load_compatibility_config()
+        strats = [
+            BestFitDecreasingStrategy(),
+            FirstFitDecreasingStrategy(),
+            SimulatedAnnealingStrategy(),
+            FreeNestingStrategy(),
+            OrtBlockAssignmentStrategy(),
+            OrtPatternSelectionStrategy(),
+        ]
+        for s in strats:
+            if s.info.id in compat:
+                s.info.supported_cut_types = compat[s.info.id]
+            self.register(s)
 
     def register(self, strategy: NestingStrategy):
         self._algorithms[strategy.info.id] = strategy

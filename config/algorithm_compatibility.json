@@ -1,0 +1,8 @@
+{
+  "best_fit_decreasing": ["guillotine"],
+  "first_fit_decreasing": ["guillotine"],
+  "simulated_annealing": ["guillotine"],
+  "ortools_block_assignment": ["guillotine"],
+  "ortools_pattern_selection": ["guillotine"],
+  "free_nesting_heuristic": ["free"]
+}

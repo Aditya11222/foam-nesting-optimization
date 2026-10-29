@@ -279,7 +279,7 @@ class OrtPatternSelectionStrategy(NestingStrategy):
             request=request,
             candidate_stocks=candidate_stocks,
             machine=machine,
-            max_pool_size=300
+            max_pool_size=150
         )
 
         if not patterns:
@@ -351,9 +351,12 @@ class OrtPatternSelectionStrategy(NestingStrategy):
         model.Minimize(sum(obj_terms))
 
         # 6. Solve Model
+        import os
+        workers = min(4, max(1, os.cpu_count() or 2))
         solver = cp_mod.CpSolver()
         solver.parameters.max_time_in_seconds = min(request.time_budget_seconds, 10.0)
-        solver.parameters.num_search_workers = 1
+        solver.parameters.num_search_workers = workers
+        solver.parameters.relative_gap_limit = 0.02
         solver.parameters.random_seed = request.seed
 
         solve_start = time.perf_counter()
