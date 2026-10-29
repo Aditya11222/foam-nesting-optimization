@@ -145,12 +145,12 @@ Step 4 replaces basic summary metrics with an interactive operational and financ
    - **Total Job Cost**: Net production expenditure (Material + Saw Time - Remnant Credit).
    - **Finished Part Cost**: Average cost per finished piece nested.
    - Labeled clearly: *"Estimated, based on demo assumptions."*
-4. **6 Light-Themed Visualizations (Recharts)**:
+4. **5 Light-Themed Visualizations (Three-Column Balanced Stack)**:
    - Volume Breakdown (Parts, Remnants, Scrap, Trim, Kerf in cu ft).
    - **Efficiency vs Baseline (<Selected Algorithm>)**: Grouped horizontal comparative bars contrasting the active heuristic against the naive simulated baseline across 5 normalized metrics (Net usable yield %, Scrap %, Blocks count, Total cuts count, Estimated saw time min). Features direct value labels, honest delta chips with explicit "worse" tags when applicable, batch efficiency score reduction %, and data-driven summary banner.
    - **Baseline vs. Optimized Cost**: USD-only comparative grouped bar chart (Foam Cost, Scrap Cost, Saw Time, Remnant Credit, Net Cost) with comma thousands separators (`$1,845`), Y-axis titled `Cost (USD, estimated)`, real net savings chip `Net saving $X (Y%)`, strict mathematical reconciliation assertion ($\text{Foam} + \text{Saw} - \text{Credit} = \text{Net Cost} \pm \$0.01$), dynamic bun reduction footnote, and zero-credit auto-hiding.
    - Per-Block Utilization Stacked Bar (% Parts, Remnants, Kerf, Scrap).
-   - Cost Component Breakdown (Raw Foam, Saw Time, Remnant Credit).
+
    - Machine Efficiency Trade-offs (Guillotine vs Waterjet on kerf, cut count, and time).
 5. **Shop-Floor Execution Tracking Table**:
    - Planned vs. Actual yield and runtime tracking per block with live variance calculation and status progression (`Pending`, `In Progress`, `Completed`).

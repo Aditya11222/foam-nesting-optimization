@@ -265,13 +265,26 @@ export function App() {
         setAlgorithms(a);
 
         let activeMachId = selectedMachineId;
-        if (m.length > 0 && !selectedMachineId) {
+        const params = new URLSearchParams(window.location.search);
+        const machineParam = params.get('machine');
+        if (machineParam) {
+          activeMachId = machineParam;
+          setSelectedMachineId(machineParam);
+          setIsMachineAuto(false);
+          const foundM = m.find((mach) => mach.id === machineParam);
+          if (foundM) setKerf(foundM.kerf);
+        } else if (m.length > 0 && !selectedMachineId) {
           activeMachId = m[0].id;
           setSelectedMachineId(m[0].id);
           setKerf(m[0].kerf);
         }
 
-        const params = new URLSearchParams(window.location.search);
+        const algoParam = params.get('algo');
+        if (algoParam) {
+          setSelectedAlgorithmId(algoParam);
+          setIsStrategyAuto(false);
+        }
+
         const stepParam = params.get('step');
         if (stepParam) {
           setActiveStep(parseInt(stepParam) || 2);
@@ -282,25 +295,27 @@ export function App() {
         }
         const autoRunParam = params.get('autorun');
         if (autoRunParam === 'true') {
+          const runAlgo = algoParam || (activeMachId === 'saw-wj' || activeMachId === 'saw-wire-cnc' ? 'free_nesting_heuristic' : 'best_fit_decreasing');
+          setSelectedAlgorithmId(runAlgo);
           setJobName('Sample job #4821');
           setCurrentJobId('JOB-4821');
           const autoReq: OptimizationRequest = {
             job_id: 'JOB-4821',
             customer: customerRef || undefined,
             grade: 'HR-40',
-            machine_id: activeMachId || 'saw-g2',
+            machine_id: activeMachId || 'saw-g1',
             machine_objective: 'lowest_cost',
             skin_trim_per_face: 1.0,
             kerf: 0.125,
             parts: SAMPLE_JOB_PARTS,
             available_blocks: DEFAULT_BLOCKS,
-            algorithm_id: 'best_fit_decreasing',
+            algorithm_id: runAlgo,
             seed: 42,
             time_budget_seconds: 10.0,
           };
           try {
             const res = await optimizeJob(autoReq);
-            setResultsByAlgo({ ortools_block_assignment: res, best_fit_decreasing: res });
+            setResultsByAlgo({ [runAlgo]: res });
             setIs3DGenerated(true);
             setIsStale(false);
             setLastOptimizedAt(new Date().toISOString());

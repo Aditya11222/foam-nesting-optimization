@@ -17,6 +17,7 @@ import {
   Info,
   Sparkles,
   Star,
+  AlertCircle,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -33,7 +34,9 @@ import {
 import type { OptimizationResult, RemnantOutput, PartItem } from '../types';
 import { groupAndRankRemnants } from '../services/remnantScoring';
 import { computeEfficiencyVsBaseline } from '../services/efficiencyBaseline';
-import { computeCostReconciliation, formatCurrencyShort } from '../services/costReconciliation';
+import { computeCostReconciliation } from '../services/costReconciliation';
+import { computeVolumeBreakdown, VOLUME_COLORS } from '../services/volumeBreakdown';
+import { computeMachineEfficiency } from '../services/machineEfficiency';
 import { RemnantScoringExplanationBlock } from './RemnantScoringExplanationBlock';
 
 interface DashboardStep4Props {
@@ -57,7 +60,7 @@ const DEFAULT_COST_BY_GRADE: Record<string, number> = {
 
 export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   currentResult,
-  comparisonResults: _comparisonResults,
+  comparisonResults,
   onGoToCutSteps,
   onExportCSV,
   onAddRemnantToInventory,
@@ -92,6 +95,8 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   });
 
   const [selectedRemnantCodeForBreakdown, setSelectedRemnantCodeForBreakdown] = useState<string | null>(null);
+  const [showCostCalculation, setShowCostCalculation] = useState<boolean>(false);
+  const [showAllVolumeBlocks, setShowAllVolumeBlocks] = useState<boolean>(false);
 
   const handleUpdateTracking = (
     blockIndex: number,
@@ -117,11 +122,8 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
   const {
     unitCost,
     optGrossCuFt,
-    optPartsCuFt,
     optRemnantsCuFt,
     optScrapCuFt,
-    optTrimCuFt,
-    optKerfCuFt,
     optMaterialCost,
     optSawCost,
     optRemnantCredit,
@@ -201,14 +203,48 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
     };
   }, [currentResult, costByGrade, sawRatePerHour, remnantCreditPct]);
 
-  // Chart 1: Volume Breakdown
+  // Chart 1: Volume Breakdown Report & Categories
+  const volumeReport = useMemo(() => {
+    return computeVolumeBreakdown(currentResult, unitCost, remnantCreditPct);
+  }, [currentResult, unitCost, remnantCreditPct]);
+
   const volumeChartData = useMemo(() => [
-    { name: isEs ? 'Piezas' : 'Parts', cuFt: Number(optPartsCuFt.toFixed(2)), fill: '#3B82F6' },
-    { name: isEs ? 'Remanentes' : 'Remnants', cuFt: Number(optRemnantsCuFt.toFixed(2)), fill: '#10B981' },
-    { name: isEs ? 'Desperdicio' : 'Scrap', cuFt: Number(optScrapCuFt.toFixed(2)), fill: '#EF4444' },
-    { name: isEs ? 'Desorillado' : 'Skin Trim', cuFt: Number(optTrimCuFt.toFixed(2)), fill: '#F59E0B' },
-    { name: isEs ? 'Kerf' : 'Kerf Loss', cuFt: Number(optKerfCuFt.toFixed(2)), fill: '#8B5CF6' },
-  ], [optPartsCuFt, optRemnantsCuFt, optScrapCuFt, optTrimCuFt, optKerfCuFt, isEs]);
+    {
+      name: isEs ? volumeReport.partsItem.nameEs : volumeReport.partsItem.name,
+      cuFt: Number(volumeReport.partsItem.volumeCuFt.toFixed(1)),
+      sharePct: volumeReport.partsItem.sharePct.toFixed(1),
+      fill: volumeReport.partsItem.color,
+      industryMeaning: isEs ? volumeReport.partsItem.industryMeaningEs : volumeReport.partsItem.industryMeaning
+    },
+    {
+      name: isEs ? volumeReport.remnantsItem.nameEs : volumeReport.remnantsItem.name,
+      cuFt: Number(volumeReport.remnantsItem.volumeCuFt.toFixed(1)),
+      sharePct: volumeReport.remnantsItem.sharePct.toFixed(1),
+      fill: volumeReport.remnantsItem.color,
+      industryMeaning: isEs ? volumeReport.remnantsItem.industryMeaningEs : volumeReport.remnantsItem.industryMeaning
+    },
+    {
+      name: isEs ? volumeReport.scrapItem.nameEs : volumeReport.scrapItem.name,
+      cuFt: Number(volumeReport.scrapItem.volumeCuFt.toFixed(1)),
+      sharePct: volumeReport.scrapItem.sharePct.toFixed(1),
+      fill: volumeReport.scrapItem.color,
+      industryMeaning: isEs ? volumeReport.scrapItem.industryMeaningEs : volumeReport.scrapItem.industryMeaning
+    },
+    {
+      name: isEs ? volumeReport.trimItem.nameEs : volumeReport.trimItem.name,
+      cuFt: Number(volumeReport.trimItem.volumeCuFt.toFixed(1)),
+      sharePct: volumeReport.trimItem.sharePct.toFixed(1),
+      fill: volumeReport.trimItem.color,
+      industryMeaning: isEs ? volumeReport.trimItem.industryMeaningEs : volumeReport.trimItem.industryMeaning
+    },
+    {
+      name: isEs ? volumeReport.kerfItem.nameEs : volumeReport.kerfItem.name,
+      cuFt: Number(volumeReport.kerfItem.volumeCuFt.toFixed(1)),
+      sharePct: volumeReport.kerfItem.sharePct.toFixed(1),
+      fill: volumeReport.kerfItem.color,
+      industryMeaning: isEs ? volumeReport.kerfItem.industryMeaningEs : volumeReport.kerfItem.industryMeaning
+    },
+  ], [volumeReport, isEs]);
 
   // Chart 2: Efficiency vs Baseline Report
   const efficiencyReport = useMemo(() => {
@@ -250,7 +286,9 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
       optSawCost,
       optRemnantCredit,
       optNetJobCost,
-      currentResult.blocks_used_count
+      currentResult.blocks_used_count,
+      currentResult.total_parts_placed,
+      currentResult.total_parts_demanded
     );
   }, [
     unitCost,
@@ -266,56 +304,32 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
     optRemnantCredit,
     optNetJobCost,
     currentResult.blocks_used_count,
+    currentResult.total_parts_placed,
+    currentResult.total_parts_demanded,
   ]);
 
-  const baselineVsOptimizedData = useMemo(() => {
-    return costReport.categories.map((c) => ({
-      category: isEs ? c.categoryEs : c.category,
-      Baseline: c.baseline,
-      Optimized: c.optimized,
-      baselineFormatted: formatCurrencyShort(c.baseline),
-      optimizedFormatted: formatCurrencyShort(c.optimized),
-      deltaFormatted: c.deltaDisplay,
+  // Chart 4: Per-Block Utilization Stacked (All 5 Categories summing to 100% of Gross Bun Volume)
+  const perBlockChartData = useMemo(() => {
+    return volumeReport.blocks.map((b) => ({
+      block: isEs ? b.blockLabelEs : b.blockLabel,
+      parts: Number(b.partsSharePct.toFixed(1)),
+      remnants: Number(b.remnantsSharePct.toFixed(1)),
+      scrap: Number(b.scrapSharePct.toFixed(1)),
+      trim: Number(b.trimSharePct.toFixed(1)),
+      kerf: Number(b.kerfSharePct.toFixed(1)),
+      partsCuFt: b.partsCuFt,
+      remnantsCuFt: b.remnantsCuFt,
+      scrapCuFt: b.scrapCuFt,
+      trimCuFt: b.trimCuFt,
+      kerfCuFt: b.kerfCuFt,
+      netYieldPct: b.netYieldPct,
     }));
-  }, [costReport, isEs]);
+  }, [volumeReport.blocks, isEs]);
 
-  // Chart 4: Per-Block Utilization
-  const perBlockData = useMemo(() => {
-    return currentResult.blocks.map((b) => ({
-      block: `Block #${b.block_index}`,
-      parts: b.net_utilization_pct,
-      remnants: Number(((b.usable_remnants.reduce((sum, r) => sum + r.volume, 0) / Math.max(1, b.usable_volume)) * 100).toFixed(1)),
-      scrap: Number(((b.unrecoverable_scrap_volume / Math.max(1, b.usable_volume)) * 100).toFixed(1)),
-      kerf: Number(((b.kerf_loss_volume / Math.max(1, b.usable_volume)) * 100).toFixed(1)),
-    }));
-  }, [currentResult.blocks]);
-
-  // Chart 5: Cost Breakdown Waterfall / Components
-  const costBreakdownBarData = useMemo(() => [
-    { component: isEs ? 'Materia Prima' : 'Raw Foam', amount: Math.round(optMaterialCost), color: '#3B82F6', isCredit: false },
-    { component: isEs ? 'Tiempo de Sierra' : 'Saw Operation', amount: Math.round(optSawCost), color: '#6366F1', isCredit: false },
-    { component: isEs ? 'Crédito Remanente (-)' : 'Remnant Credit (-)', amount: Math.round(optRemnantCredit), color: '#10B981', isCredit: true },
-    { component: isEs ? 'Costo Neto Total' : 'Net Total Cost', amount: Math.max(0, Math.round(optNetJobCost)), color: '#0F172A', isCredit: false },
-  ], [optMaterialCost, optSawCost, optRemnantCredit, optNetJobCost, isEs]);
-
-  // Chart 6: Machine Efficiency Comparison
-  const machineEfficiencyData = useMemo(() => [
-    {
-      metric: isEs ? 'Kerf (pulg³ x100)' : 'Kerf Loss (cu in x100)',
-      Guillotine: Math.round((currentResult.machine.cut_type === 'guillotine' ? currentResult.total_kerf_volume : 2400.0) / 100.0),
-      Waterjet: Math.round((currentResult.machine.cut_type === 'free' ? currentResult.total_kerf_volume : 1200.0) / 100.0),
-    },
-    {
-      metric: isEs ? 'Cortes (#)' : 'Cut Count (cuts)',
-      Guillotine: currentResult.machine.cut_type === 'guillotine' ? currentResult.total_cuts_count : 48,
-      Waterjet: currentResult.machine.cut_type === 'free' ? currentResult.total_cuts_count : 62,
-    },
-    {
-      metric: isEs ? 'Tiempo (min)' : 'Saw Time (min)',
-      Guillotine: currentResult.machine.cut_type === 'guillotine' ? Math.round(currentResult.estimated_saw_time_minutes) : 28,
-      Waterjet: currentResult.machine.cut_type === 'free' ? Math.round(currentResult.estimated_saw_time_minutes) : 46,
-    }
-  ], [currentResult, isEs]);
+  // Chart 6: Machine Efficiency Report
+  const machineEfficiencyReport = useMemo(() => {
+    return computeMachineEfficiency(currentResult, comparisonResults);
+  }, [currentResult, comparisonResults]);
 
   // All Usable Remnants
   const allRemnants: RemnantOutput[] = useMemo(() => {
@@ -630,51 +644,379 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
         </div>
       </div>
 
-      {/* 6 Light-Themed Visualizations Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {/* Chart 1: Volume Reconciliation Breakdown */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              <span>Volume Breakdown (ft³)</span>
-            </span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-              100% Reconciled
-            </span>
-          </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={volumeChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                <Tooltip
-                  formatter={(val: any) => [`${val} ft³`, 'Volume']}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
-                />
-                <Bar dataKey="cuFt" radius={[4, 4, 0, 0]}>
-                  {volumeChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            Total Gross Bun Volume: {optGrossCuFt.toFixed(1)} ft³ (Parts + Remnants + Scrap + Trim + Kerf)
-          </p>
-        </div>
+      {/* 5 Light-Themed Visualizations (Three-Column Balanced Stack) */}
+      <div className="grid grid-cols-1 min-[801px]:grid-cols-2 min-[1201px]:grid-cols-3 gap-4 items-start">
+        {/* Column 1: Volume Breakdown */}
+        <div className="flex flex-col gap-4 min-w-0">
+          {/* Chart 1: Volume Reconciliation Breakdown */}
+          <div
+            className="p-4 rounded-xl border border-slate-200 bg-white space-y-3.5 flex flex-col justify-between"
+          role="region"
+          aria-label={isEs ? 'Desglose y conciliación del volumen de espuma' : 'Foam volume reconciliation and breakdown'}
+        >
+          <div className="space-y-3">
+            {/* Header: Title, Yield Clarification Tooltip, and Reconciled Badge */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
+              <div className="flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
+                <span className="text-xs font-bold text-slate-800">
+                  {isEs ? 'Desglose de Volumen (ft³)' : 'Volume Breakdown (ft³)'}
+                </span>
+                <button
+                  type="button"
+                  title={isEs ? volumeReport.yieldExplanationEs : volumeReport.yieldExplanationEn}
+                  className="text-slate-400 hover:text-blue-600 transition-colors cursor-help p-0.5 rounded"
+                  aria-label={isEs ? 'Explicación del rendimiento bruto vs neto' : 'Gross vs net yield explanation'}
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-2xs font-mono ${
+                  volumeReport.isReconciled
+                    ? 'text-emerald-800 bg-emerald-50 border-emerald-300'
+                    : 'text-rose-800 bg-rose-50 border-rose-300'
+                }`}
+              >
+                {volumeReport.isReconciled
+                  ? (isEs ? '100% Conciliado' : '100% Reconciled')
+                  : (isEs ? 'No Conciliado' : 'Totals do not reconcile')}
+              </span>
+            </div>
 
+            {/* Reconciliation Discrepancy Alert if not reconciled */}
+            {!volumeReport.isReconciled && (
+              <div className="p-2 bg-rose-50 border border-rose-300 rounded text-xs text-rose-800 font-semibold flex items-center space-x-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>
+                  {isEs
+                    ? `Discrepancia de volumen detectada: ${volumeReport.reconciliationDeltaCuFt.toFixed(2)} ft³`
+                    : `Volume discrepancy detected: ${volumeReport.reconciliationDeltaCuFt.toFixed(2)} ft³`}
+                </span>
+              </div>
+            )}
+
+            {/* Vertical Bar Chart with Direct Labels and Minimum Point Size */}
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={volumeChartData} margin={{ top: 28, right: 10, left: -20, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748B' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
+                  <Tooltip
+                    content={({ active, payload }: any) => {
+                      if (active && payload && payload.length) {
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-[#FFFDF7] border border-amber-200/90 shadow-md rounded-lg p-2.5 text-xs space-y-1">
+                            <div className="flex items-center space-x-1.5 font-bold text-slate-900">
+                              <span className="w-2.5 h-2.5 rounded-xs" style={{ backgroundColor: d.fill }} />
+                              <span>{d.name}</span>
+                            </div>
+                            <div className="font-mono text-slate-700">
+                              <span className="font-bold text-slate-900">{d.cuFt} ft³</span>
+                              <span className="text-slate-400 mx-1.5">•</span>
+                              <span className="font-bold text-amber-900">{d.sharePct}% {isEs ? 'del bruto' : 'of gross'}</span>
+                            </div>
+                            <div className="text-[10.5px] text-slate-600 max-w-[210px] leading-tight pt-0.5">
+                              {d.industryMeaning}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar
+                    dataKey="cuFt"
+                    radius={[4, 4, 0, 0]}
+                    minPointSize={8}
+                    label={(props: any) => {
+                      const { x, y, width, index } = props;
+                      const cat = volumeReport.categories[index];
+                      if (!cat) return null;
+                      return (
+                        <g>
+                          <text
+                            x={x + width / 2}
+                            y={y - 13}
+                            textAnchor="middle"
+                            fill="#0F172A"
+                            fontSize="9.5"
+                            fontWeight="700"
+                            fontFamily="monospace"
+                          >
+                            {cat.volumeCuFt.toFixed(1)}
+                          </text>
+                          <text
+                            x={x + width / 2}
+                            y={y - 3}
+                            textAnchor="middle"
+                            fill="#64748B"
+                            fontSize="8.5"
+                            fontWeight="600"
+                            fontFamily="monospace"
+                          >
+                            {cat.sharePct.toFixed(1)}%
+                          </text>
+                        </g>
+                      );
+                    }}
+                  >
+                    {volumeChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Hairline Divider */}
+            <div className="border-t border-slate-100 pt-2" />
+
+            {/* 3.1 Composition Bar */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span className="flex items-center space-x-1.5">
+                  <span className="font-bold">{isEs ? 'Composición del Bloque Bruto' : 'Gross Bun Composition'}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">({isEs ? 'particionado 100%' : '100% partitioned'})</span>
+                </span>
+                <span className="font-mono text-[11px] font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  {volumeReport.totalGrossCuFtDisplay} {isEs ? 'bruto' : 'gross'}
+                </span>
+              </div>
+
+              {/* Horizontal 100% Stacked Bar */}
+              <div className="w-full h-5 rounded-md overflow-hidden flex bg-slate-100 shadow-inner">
+                {volumeReport.categories.map((cat) => (
+                  cat.sharePct > 0 && (
+                    <div
+                      key={cat.key}
+                      style={{ width: `${cat.sharePct}%`, backgroundColor: cat.color }}
+                      className="h-full transition-all duration-300 relative group cursor-help flex items-center justify-center text-[10px] text-white font-mono font-bold select-none overflow-hidden"
+                      title={`${isEs ? cat.nameEs : cat.name}: ${cat.volumeCuFtDisplay} (${cat.sharePctDisplay})`}
+                    >
+                      {cat.sharePct >= 12 && <span>{cat.sharePctDisplay}</span>}
+                    </div>
+                  )
+                ))}
+              </div>
+
+              {/* Direct Segment Chips */}
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] pt-0.5">
+                {volumeReport.categories.map((cat) => (
+                  <div key={cat.key} className="flex items-center space-x-1">
+                    <span className="w-2 h-2 rounded-xs shrink-0" style={{ backgroundColor: cat.color }} />
+                    <span className="text-slate-600 font-medium">{isEs ? cat.nameEs : cat.name}</span>
+                    <span className="font-mono font-bold text-slate-900">{cat.sharePctDisplay}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Hairline Divider */}
+            <div className="border-t border-slate-100 pt-2" />
+
+            {/* 3.2 Breakdown Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    <th className="py-1 pr-2">{isEs ? 'Categoría' : 'Category'}</th>
+                    <th className="py-1 px-1.5 text-right font-mono">{isEs ? 'Volumen (ft³)' : 'Volume (ft³)'}</th>
+                    <th className="py-1 px-1.5 text-right font-mono">{isEs ? '% del Bruto' : '% of Gross'}</th>
+                    <th className="py-1 pl-2.5">{isEs ? 'Significado Industrial' : 'Industry Meaning'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-[10.5px]">
+                  {volumeReport.categories.map((cat) => (
+                    <tr key={cat.key} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-1 pr-2 font-medium text-slate-800 flex items-center space-x-1.5 whitespace-nowrap">
+                        <span className="w-2.5 h-2.5 rounded-xs shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span>{isEs ? cat.nameEs : cat.name}</span>
+                      </td>
+                      <td className="py-1 px-1.5 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
+                        {cat.volumeCuFt.toFixed(1)}
+                      </td>
+                      <td className="py-1 px-1.5 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">
+                        {cat.sharePct.toFixed(1)}%
+                      </td>
+                      <td className="py-1 pl-2.5 text-slate-500 text-[10px]">
+                        {isEs ? cat.industryMeaningEs : cat.industryMeaning}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Totals row */}
+                  <tr className="border-t-2 border-slate-200 bg-slate-50/80 font-bold text-[10.5px]">
+                    <td className="py-1 pr-2 text-slate-900 flex items-center space-x-1.5">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-slate-800 shrink-0" />
+                      <span>{isEs ? 'Bloque Bruto Total' : 'Total Gross Bun'}</span>
+                    </td>
+                    <td className="py-1 px-1.5 text-right font-mono text-slate-900">
+                      {volumeReport.totalGrossCuFt.toFixed(1)}
+                    </td>
+                    <td className="py-1 px-1.5 text-right font-mono text-slate-900">
+                      100.0%
+                    </td>
+                    <td className="py-1 pl-2.5 text-slate-500 font-normal text-[10px]">
+                      {isEs ? 'Volumen bruto total de bloques asignados' : 'Total raw foam bun volume allocated'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Hairline Divider & Live Reconciliation Equation */}
+            <div className="pt-1.5 border-t border-slate-100 space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[10.5px]">
+                <div className="flex items-center space-x-1.5 text-slate-800 font-mono overflow-x-auto">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="font-sans font-semibold text-slate-600 mr-0.5">{isEs ? 'Ecuación:' : 'Equation:'}</span>
+                  <span className="font-bold text-slate-900 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200">
+                    {isEs ? volumeReport.reconciliationEquationEs : volumeReport.reconciliationEquation}
+                  </span>
+                </div>
+                {volumeReport.roundingNote && (
+                  <span className="italic text-slate-400 text-[9.5px]">
+                    {isEs ? volumeReport.roundingNoteEs : volumeReport.roundingNote}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Hairline Divider */}
+            <div className="border-t border-slate-100 pt-2" />
+
+            {/* 3.3 Per-Block Utilization */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span className="flex items-center space-x-1.5">
+                  <span className="font-bold">{isEs ? 'Distribución por Bloque' : 'Per-Block Distribution'}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    ({isEs ? '5 componentes' : '5 components'})
+                  </span>
+                </span>
+                <span className="font-mono text-[10.5px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                  {volumeReport.totalBlocksCount} {isEs ? 'bloques' : 'buns'}
+                </span>
+              </div>
+
+              {/* List of Blocks (First 4 or All) */}
+              <div className="space-y-1.5 pt-0.5">
+                {(showAllVolumeBlocks ? volumeReport.blocks : volumeReport.blocks.slice(0, 4)).map((block) => (
+                  <div key={block.blockIndex} className="flex items-center space-x-2 text-[10.5px]">
+                    <span className="w-16 font-mono font-semibold text-slate-600 truncate text-right shrink-0">
+                      {isEs ? block.blockLabelEs : block.blockLabel}
+                    </span>
+                    <div className="flex-1 bg-slate-100 rounded-sm h-3.5 overflow-hidden flex shadow-2xs">
+                      {block.partsSharePct > 0 && (
+                        <div
+                          style={{ width: `${block.partsSharePct}%`, backgroundColor: VOLUME_COLORS.parts }}
+                          className="h-full transition-all duration-300"
+                          title={`${isEs ? 'Piezas' : 'Parts'}: ${block.partsSharePct.toFixed(1)}% (${block.partsCuFt.toFixed(1)} ft³)`}
+                        />
+                      )}
+                      {block.remnantsSharePct > 0 && (
+                        <div
+                          style={{ width: `${block.remnantsSharePct}%`, backgroundColor: VOLUME_COLORS.remnants }}
+                          className="h-full transition-all duration-300"
+                          title={`${isEs ? 'Remanentes' : 'Remnants'}: ${block.remnantsSharePct.toFixed(1)}% (${block.remnantsCuFt.toFixed(1)} ft³)`}
+                        />
+                      )}
+                      {block.scrapSharePct > 0 && (
+                        <div
+                          style={{ width: `${block.scrapSharePct}%`, backgroundColor: VOLUME_COLORS.scrap }}
+                          className="h-full transition-all duration-300"
+                          title={`${isEs ? 'Desperdicio' : 'Scrap'}: ${block.scrapSharePct.toFixed(1)}% (${block.scrapCuFt.toFixed(1)} ft³)`}
+                        />
+                      )}
+                      {block.trimSharePct > 0 && (
+                        <div
+                          style={{ width: `${block.trimSharePct}%`, backgroundColor: VOLUME_COLORS.trim }}
+                          className="h-full transition-all duration-300"
+                          title={`${isEs ? 'Desorillado' : 'Skin Trim'}: ${block.trimSharePct.toFixed(1)}% (${block.trimCuFt.toFixed(1)} ft³)`}
+                        />
+                      )}
+                      {block.kerfSharePct > 0 && (
+                        <div
+                          style={{ width: `${block.kerfSharePct}%`, backgroundColor: VOLUME_COLORS.kerf }}
+                          className="h-full transition-all duration-300"
+                          title={`${isEs ? 'Kerf' : 'Kerf'}: ${block.kerfSharePct.toFixed(1)}% (${block.kerfCuFt.toFixed(1)} ft³)`}
+                        />
+                      )}
+                    </div>
+                    <span className="w-20 font-mono font-bold text-right text-[10px] text-blue-700 whitespace-nowrap shrink-0">
+                      {block.partsSharePct.toFixed(1)}% {isEs ? 'piezas' : 'parts'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Show All / Show Fewer Toggle if > 4 blocks */}
+              {volumeReport.totalBlocksCount > 4 && (
+                <div className="pt-0.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setShowAllVolumeBlocks(!showAllVolumeBlocks)}
+                    className="text-[10.5px] font-semibold text-blue-600 hover:text-blue-800 transition inline-flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>
+                      {showAllVolumeBlocks
+                        ? (isEs ? 'Mostrar menos bloques' : 'Show fewer blocks')
+                        : (isEs ? `Mostrar los ${volumeReport.totalBlocksCount} bloques` : `Show all ${volumeReport.totalBlocksCount} blocks`)}
+                    </span>
+                    {showAllVolumeBlocks ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Hairline Divider */}
+            <div className="border-t border-slate-100 pt-2" />
+
+            {/* 3.4 Key Takeaways */}
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-xs text-slate-700 leading-relaxed">
+              <div className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-800">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>{isEs ? 'Conclusiones Clave' : 'Key Takeaways'}</span>
+              </div>
+              <ul className="space-y-1 text-[11px] text-slate-600 pl-0.5">
+                {(isEs ? volumeReport.takeawaySentencesEs : volumeReport.takeawaySentencesEn).map((sentence, sIdx) => (
+                  <li key={sIdx} className="flex items-start space-x-1.5">
+                    <span className="text-amber-800 font-bold shrink-0 mt-0.5">•</span>
+                    <span>{sentence}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Footnote / Yield Note */}
+          <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-500 flex items-center justify-between">
+            <span>
+              {isEs ? 'Rendimiento Neto Utilizable' : 'Net Usable Yield'}: <strong className="text-slate-800 font-mono">{volumeReport.netYieldPct.toFixed(1)}%</strong>
+            </span>
+            <span className="italic text-slate-400">
+              {isEs ? 'Rendimiento Bruto' : 'Gross Yield'}: <strong className="text-slate-800 font-mono">{volumeReport.grossYieldPct.toFixed(1)}%</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Column 2: Efficiency vs Baseline + Per-Block Utilization */}
+      <div className="flex flex-col gap-4 min-w-0">
         {/* Chart 2: Efficiency vs Baseline (<Selected Algorithm Name>) */}
         <div className={`p-4 rounded-xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between ${isStale ? 'opacity-80 ring-1 ring-amber-300' : ''}`}>
           <div>
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
-              <div className="flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-800" />
-                <span className="text-xs font-bold text-slate-800">
-                  {isEs ? 'Eficiencia vs Línea Base' : 'Efficiency vs Baseline'} ({efficiencyReport.algorithmName})
+              <div>
+                <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-800" />
+                  <span>{isEs ? 'Eficiencia vs Línea Base' : 'Efficiency vs Baseline'}</span>
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5 truncate max-w-[220px]" title={efficiencyReport.algorithmName}>
+                  {efficiencyReport.algorithmName}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -792,175 +1134,560 @@ export const DashboardStep4: React.FC<DashboardStep4Props> = ({
           </div>
         </div>
 
-        {/* Chart 3: Baseline vs. Optimized Cost */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 flex flex-col justify-between">
-          <div>
-            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
-              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span>{isEs ? 'Línea Base vs. Optimizado' : 'Baseline vs. Optimized'}</span>
-              </span>
-              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
-                {costReport.savingsChipText}
-              </span>
-            </div>
-
-            {/* Reconciliation Warning (if discrepancy detected) */}
-            {!costReport.isFullyReconciled && (
-              <div className="mt-2 p-2 bg-rose-50 border border-rose-300 rounded text-xs text-rose-800 font-semibold">
-                {costReport.reconciliationError}
-              </div>
-            )}
-
-            {/* Zero Remnant Credit Notice if hidden */}
-            {!costReport.hasRemnantCredit && (
-              <div className="mt-1 text-[10px] text-slate-400 italic">
-                * {isEs ? 'Sin crédito por remanentes' : 'No remnant credit'} ({isEs ? 'remanentes minimizados o bajo umbral de retención' : 'all off-cuts minimized or below retention threshold'}).
-              </div>
-            )}
-
-            <div className="h-60 min-h-[240px] mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={baselineVsOptimizedData} margin={{ top: 20, right: 10, left: 15, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis
-                    dataKey="category"
-                    tick={{ fontSize: 10, fill: '#475569', fontWeight: 600 }}
-                    interval={0}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                    tickFormatter={(val: number) => `$${val.toLocaleString()}`}
-                    label={{
-                      value: isEs ? 'Coste (USD, estimado)' : 'Cost (USD, estimated)',
-                      angle: -90,
-                      position: 'insideLeft',
-                      offset: 0,
-                      style: { textAnchor: 'middle', fontSize: 10, fill: '#64748B', fontWeight: 500 }
-                    }}
-                  />
-                  <Tooltip
-                    formatter={(val: any, name: any) => [formatCurrencyShort(Number(val)), name]}
-                    contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="Baseline" fill="#A8A29E" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="baselineFormatted" position="top" style={{ fontSize: 9, fontWeight: 700, fill: '#64748B' }} />
-                  </Bar>
-                  <Bar dataKey="Optimized" fill="#10B981" radius={[4, 4, 0, 0]}>
-                    <LabelList dataKey="optimizedFormatted" position="top" style={{ fontSize: 9, fontWeight: 700, fill: '#047857' }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Footnote with Data-Driven Bun Text */}
-          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1.5">
-            <span className="font-medium text-slate-700">{costReport.bunReductionText}</span>
-            <span className="italic text-slate-400">{costReport.disclaimerText}</span>
-          </div>
-        </div>
-
         {/* Chart 4: Per-Block Utilization Stacked */}
         <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-violet-500" />
-              <span>Per-Block Utilization (%)</span>
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-violet-600" />
+                <span>{isEs ? 'Aprovechamiento por Bloque (%)' : 'Per-Block Utilization (%)'}</span>
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                {isEs ? 'Partición 100% del volumen bruto' : '100% gross bun volume partitioned'}
+              </span>
+            </div>
+            <span className="text-[10.5px] font-mono font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              {currentResult.blocks.length} {isEs ? (currentResult.blocks.length === 1 ? 'bloque' : 'bloques') : (currentResult.blocks.length === 1 ? 'bun' : 'buns')}
             </span>
-            <span className="text-[10px] font-mono text-slate-400">{currentResult.blocks.length} Blocks</span>
           </div>
-          <div className="h-56">
+
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={perBlockData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={perBlockChartData} margin={{ top: 12, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                 <XAxis dataKey="block" tick={{ fontSize: 10, fill: '#64748B' }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#64748B' }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#64748B' }} ticks={[0, 25, 50, 75, 100]} />
                 <Tooltip
-                  formatter={(val: any) => [`${val}%`]}
+                  formatter={(val: any, name: any, item: any) => {
+                    const key = item.dataKey;
+                    const cuFt = item.payload?.[`${key}CuFt`];
+                    const cuFtStr = typeof cuFt === 'number' ? ` (${cuFt.toFixed(1)} ft³)` : '';
+                    return [`${Number(val).toFixed(1)}%${cuFtStr}`, name];
+                  }}
                   contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
                 />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar dataKey="parts" stackId="a" fill="#3B82F6" name={isEs ? 'Piezas' : 'Parts'} />
-                <Bar dataKey="remnants" stackId="a" fill="#10B981" name={isEs ? 'Remanentes' : 'Remnants'} />
-                <Bar dataKey="kerf" stackId="a" fill="#8B5CF6" name={isEs ? 'Kerf' : 'Kerf'} />
-                <Bar dataKey="scrap" stackId="a" fill="#EF4444" name={isEs ? 'Desperdicio' : 'Scrap'} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            Early blocks packed densely; trailing block yields usable remnant box
-          </p>
-        </div>
-
-        {/* Chart 5: Cost Component Breakdown (Bar/Waterfall Composition) */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-500" />
-              <span>{t('cost_component_breakdown')}</span>
-            </span>
-            <span className="text-[10px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-              Net Cost: ${Math.round(optNetJobCost).toLocaleString()}
-            </span>
-          </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={costBreakdownBarData} margin={{ top: 15, right: 15, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="component" tick={{ fontSize: 10, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => `$${val}`} />
-                <Tooltip
-                  formatter={(val: any, _name: any, item: any) => [
-                    `${item.payload.isCredit ? '-$' : '$'}${Math.abs(Number(val)).toLocaleString()}`,
-                    item.payload.component,
-                  ]}
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }}
-                />
-                <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
-                  {costBreakdownBarData.map((entry: { color: string }, index: number) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
+                <Bar dataKey="parts" stackId="a" fill={VOLUME_COLORS.parts} name={isEs ? 'Piezas' : 'Parts'}>
+                  <LabelList
+                    dataKey="parts"
+                    content={(props: any) => {
+                      const { x, y, width, height, value } = props;
+                      if (!value || value < 6 || height < 12) return null;
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y + height / 2 + 3}
+                          textAnchor="middle"
+                          fill="#FFFFFF"
+                          fontSize="9"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  />
+                </Bar>
+                <Bar dataKey="remnants" stackId="a" fill={VOLUME_COLORS.remnants} name={isEs ? 'Remanentes' : 'Remnants'}>
+                  <LabelList
+                    dataKey="remnants"
+                    content={(props: any) => {
+                      const { x, y, width, height, value } = props;
+                      if (!value || value < 6 || height < 12) return null;
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y + height / 2 + 3}
+                          textAnchor="middle"
+                          fill="#FFFFFF"
+                          fontSize="9"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  />
+                </Bar>
+                <Bar dataKey="scrap" stackId="a" fill={VOLUME_COLORS.scrap} name={isEs ? 'Desperdicio' : 'Scrap'}>
+                  <LabelList
+                    dataKey="scrap"
+                    content={(props: any) => {
+                      const { x, y, width, height, value } = props;
+                      if (!value || value < 6 || height < 12) return null;
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y + height / 2 + 3}
+                          textAnchor="middle"
+                          fill="#FFFFFF"
+                          fontSize="9"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  />
+                </Bar>
+                <Bar dataKey="trim" stackId="a" fill={VOLUME_COLORS.trim} name={isEs ? 'Desorillado' : 'Skin Trim'}>
+                  <LabelList
+                    dataKey="trim"
+                    content={(props: any) => {
+                      const { x, y, width, height, value } = props;
+                      if (!value || value < 6 || height < 12) return null;
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y + height / 2 + 3}
+                          textAnchor="middle"
+                          fill="#FFFFFF"
+                          fontSize="9"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  />
+                </Bar>
+                <Bar dataKey="kerf" stackId="a" fill={VOLUME_COLORS.kerf} name={isEs ? 'Kerf' : 'Kerf'}>
+                  <LabelList
+                    dataKey="kerf"
+                    content={(props: any) => {
+                      const { x, y, width, height, value } = props;
+                      if (!value || value < 6 || height < 12) return null;
+                      return (
+                        <text
+                          x={x + width / 2}
+                          y={y + height / 2 + 3}
+                          textAnchor="middle"
+                          fill="#FFFFFF"
+                          fontSize="9"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {Number(value).toFixed(1)}%
+                        </text>
+                      );
+                    }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-50 pt-2 px-1">
-            <span>* {t('cost_disclaimer')}</span>
-            <span className="text-emerald-600 font-medium">
-              Remnant recovery offset: ${Math.round(optRemnantCredit)} ({((optRemnantCredit / Math.max(1, optMaterialCost)) * 100).toFixed(1)}% of foam)
-            </span>
+
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[10.5px] text-slate-500 text-center leading-snug">
+              {isEs ? volumeReport.perBlockCaptionEs : volumeReport.perBlockCaptionEn}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Column 3: Baseline vs. Optimized + Machine Efficiency Trade-offs */}
+      <div className="flex flex-col gap-4 min-w-0">
+        {/* Chart 3: Baseline vs. Optimized Cost */}
+        <div
+          className="p-4 rounded-xl border border-slate-200 bg-white space-y-3.5 flex flex-col justify-between"
+          role="region"
+          aria-label={isEs ? 'Gráfico comparativo de costos entre línea base y optimizado' : 'Baseline versus optimized cost comparison chart'}
+        >
+          <div className="space-y-3">
+            {/* Header: Title, Subtitle, and Net Savings Chip */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
+              <div>
+                <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#78350F]" />
+                  <span>{isEs ? 'Línea Base vs. Optimizado' : 'Baseline vs. Optimized'}</span>
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {isEs ? 'Costo (USD, estimado)' : 'Cost (USD, estimated)'}
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 shadow-2xs font-mono">
+                {isEs ? costReport.savingsChipTextEs : costReport.savingsChipText}
+              </span>
+            </div>
+
+            {/* Reconciliation Warning if Delta Detected */}
+            {!costReport.isFullyReconciled && (
+              <div className="p-2 bg-rose-50 border border-rose-300 rounded text-xs text-rose-800 font-semibold flex items-center space-x-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{costReport.reconciliationError}</span>
+              </div>
+            )}
+
+            {/* Unplaced Parts Warning if applicable */}
+            {costReport.unplacedNote && (
+              <div className="text-[10.5px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
+                {isEs ? costReport.unplacedNoteEs : costReport.unplacedNote}
+              </div>
+            )}
+
+            {/* Horizontal Grouped Bars */}
+            <div className="space-y-2.5 pt-1">
+              {/* Component Rows (Foam, Scrap of-which, Saw, Remnant Credit) */}
+              {costReport.componentRows.map((row) => (
+                <div
+                  key={row.key}
+                  className={`space-y-1 ${row.isOfWhich ? 'pl-2.5 border-l-2 border-slate-200 py-0.5 bg-slate-50/50 rounded-r' : ''}`}
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={`font-semibold flex items-center space-x-1 ${row.isOfWhich ? 'text-slate-500 text-[11px]' : 'text-slate-700'}`}>
+                      {row.isOfWhich && <span className="font-mono text-[10px] mr-0.5">↳</span>}
+                      <span>{isEs ? row.categoryEs : row.category}</span>
+                    </span>
+                    <span
+                      className={`font-mono text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                        row.deltaStatus === 'improvement'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : row.deltaStatus === 'worse'
+                          ? 'bg-rose-50 text-rose-800 border-rose-300'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {isEs ? row.deltaDisplayEs : row.deltaDisplay}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    {/* Baseline Bar */}
+                    <div className="flex items-center space-x-2 text-[10px]">
+                      <span className="w-14 text-slate-400 font-medium truncate text-right">
+                        {isEs ? 'Base' : 'Baseline'}
+                      </span>
+                      <div className="flex-1 bg-slate-100 rounded-md h-2.5 overflow-hidden flex items-center">
+                        {row.isCredit ? (
+                          <span className="text-[9.5px] text-slate-400 italic px-1.5">
+                            {isEs ? row.baselineNoteEs : row.baselineNote}
+                          </span>
+                        ) : (
+                          <div
+                            className={`bg-[#A8A29E] h-full rounded-md transition-all duration-300 ${row.isOfWhich ? 'opacity-65' : ''}`}
+                            style={{ width: `${Math.max(2, Math.min(100, row.baselineRatio * 100))}%` }}
+                            title={`${isEs ? 'Línea Base' : 'Baseline'}: ${row.baselineDisplay}`}
+                          />
+                        )}
+                      </div>
+                      <span className="w-16 font-mono text-slate-600 text-right font-medium text-[10.5px]">
+                        {row.baselineDisplay}
+                      </span>
+                    </div>
+
+                    {/* Optimized Bar */}
+                    <div className="flex items-center space-x-2 text-[10px]">
+                      <span className="w-14 text-amber-950 font-bold truncate text-right">
+                        {isEs ? 'Optim.' : 'Optimized'}
+                      </span>
+                      <div className="flex-1 bg-slate-100 rounded-md h-2.5 overflow-hidden flex items-center">
+                        <div
+                          className={`${row.isCredit ? 'bg-[#15803D]' : 'bg-[#78350F]'} h-full rounded-md transition-all duration-300 ${row.isOfWhich ? 'opacity-70' : ''}`}
+                          style={{ width: `${Math.max(2, Math.min(100, row.optimizedRatio * 100))}%` }}
+                          title={`${isEs ? 'Optimizado' : 'Optimized'}: ${row.optimizedDisplay}`}
+                        />
+                      </div>
+                      <span className={`w-16 font-mono font-bold text-right text-[10.5px] ${row.isCredit ? 'text-emerald-700' : 'text-amber-950'}`}>
+                        {row.optimizedDisplay}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Hairline Divider Before Total */}
+              <div className="border-t border-slate-200 pt-1 mt-1" />
+
+              {/* Net Cost Row (Emphasized Total) */}
+              <div className="space-y-1 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-900 flex items-center space-x-1.5">
+                    <span className="w-2 h-2 rounded-xs bg-[#78350F]" />
+                    <span>{isEs ? costReport.totalRow.categoryEs : costReport.totalRow.category} ({isEs ? 'Total' : 'Total'})</span>
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                      costReport.totalRow.deltaStatus === 'improvement'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : costReport.totalRow.deltaStatus === 'worse'
+                        ? 'bg-rose-50 text-rose-800 border-rose-300'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {isEs ? costReport.totalRow.deltaDisplayEs : costReport.totalRow.deltaDisplay}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  {/* Baseline Net Bar */}
+                  <div className="flex items-center space-x-2 text-[10px]">
+                    <span className="w-14 text-slate-500 font-semibold truncate text-right">
+                      {isEs ? 'Base' : 'Baseline'}
+                    </span>
+                    <div className="flex-1 bg-slate-200/70 rounded-md h-3 overflow-hidden flex items-center">
+                      <div
+                        className="bg-[#A8A29E] h-full rounded-md transition-all duration-300"
+                        style={{ width: `${Math.max(2, Math.min(100, costReport.totalRow.baselineRatio * 100))}%` }}
+                        title={`${isEs ? 'Costo Neto Base' : 'Baseline Net Cost'}: ${costReport.totalRow.baselineDisplay}`}
+                      />
+                    </div>
+                    <span className="w-16 font-mono text-slate-800 text-right font-bold text-[11px]">
+                      {costReport.totalRow.baselineDisplay}
+                    </span>
+                  </div>
+
+                  {/* Optimized Net Bar */}
+                  <div className="flex items-center space-x-2 text-[10px]">
+                    <span className="w-14 text-amber-950 font-black truncate text-right">
+                      {isEs ? 'Optim.' : 'Optimized'}
+                    </span>
+                    <div className="flex-1 bg-slate-200/70 rounded-md h-3.5 overflow-hidden flex items-center">
+                      <div
+                        className="bg-[#78350F] h-full rounded-md transition-all duration-300 shadow-2xs"
+                        style={{ width: `${Math.max(2, Math.min(100, costReport.totalRow.optimizedRatio * 100))}%` }}
+                        title={`${isEs ? 'Costo Neto Optimizado' : 'Optimized Net Cost'}: ${costReport.totalRow.optimizedDisplay}`}
+                      />
+                    </div>
+                    <span className="w-16 font-mono text-amber-950 font-black text-right text-[11px]">
+                      {costReport.totalRow.optimizedDisplay}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* X-Axis Scale Reference Line */}
+              <div className="pt-1">
+                <div className="flex items-center text-[10px] text-slate-400 font-mono pl-16 pr-16 justify-between">
+                  {costReport.axisTicks.map((tick) => (
+                    <span key={tick}>
+                      {tick === 0 ? '$0' : `$${(tick / 1000).toFixed(0)}k`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Calculation Reconciliation Strip */}
+            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                <div className="flex items-center space-x-1.5 text-slate-800 text-[11px] font-mono overflow-x-auto">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="font-sans font-semibold text-slate-600 mr-0.5">{isEs ? 'Cálculo:' : 'Calculation:'}</span>
+                  <span className="font-bold text-slate-900 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200">
+                    {isEs ? costReport.optimizedCalculationLineEs : costReport.optimizedCalculationLine}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCostCalculation((prev) => !prev)}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline flex items-center space-x-1 cursor-pointer shrink-0"
+                  aria-expanded={showCostCalculation}
+                >
+                  <span>
+                    {showCostCalculation
+                      ? (isEs ? 'Ocultar desglose' : 'Hide calculation')
+                      : (isEs ? 'Mostrar desglose' : 'Show calculation')}
+                  </span>
+                  {showCostCalculation ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+
+              {/* Expandable Calculation Drawer */}
+              {showCostCalculation && (
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2 text-xs text-slate-700 animate-fadeIn">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                    <div className="p-2 bg-white rounded border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block font-sans">
+                        {isEs ? 'Línea Base' : 'Baseline Calculation'}
+                      </span>
+                      <p className="text-slate-800 font-medium leading-snug">
+                        {isEs ? costReport.baselineCalculationLineEs : costReport.baselineCalculationLine}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-200 space-y-1">
+                      <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block font-sans">
+                        {isEs ? 'Optimizado' : 'Optimized Calculation'}
+                      </span>
+                      <p className="text-emerald-900 font-medium leading-snug">
+                        {isEs ? costReport.optimizedCalculationLineEs : costReport.optimizedCalculationLine}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 italic">
+                    * {isEs
+                      ? 'El costo de desperdicio está incluido en el costo de espuma (materia prima bruta) y se excluye de la suma para evitar duplicación.'
+                      : 'Scrap cost is already included within foam material cost (gross bun volume) and is excluded from the summation to avoid double-counting.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footnote and Legend */}
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#A8A29E]" />
+                <span>{isEs ? 'Línea base (simulada)' : 'Baseline (simulated)'}</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#78350F]" />
+                <span className="font-semibold text-slate-700">{isEs ? 'Optimizado' : 'Optimized'}</span>
+              </span>
+              {costReport.hasRemnantCredit && (
+                <span className="flex items-center space-x-1">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#15803D]" />
+                  <span className="font-semibold text-emerald-700">{isEs ? 'Crédito (−)' : 'Credit (−)'}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className="font-medium text-slate-700">
+                {isEs ? costReport.bunReductionTextEs : costReport.bunReductionText}
+              </span>
+              <span>•</span>
+              <span className="italic text-slate-400">
+                {isEs ? costReport.disclaimerTextEs : costReport.disclaimerText}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Chart 6: Machine Efficiency Comparison */}
-<div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-500" />
-              <span>Machine Efficiency Trade-offs</span>
+        {/* Chart 6: Machine Efficiency Trade-offs */}
+        <div
+          className="p-4 rounded-xl border border-slate-200 bg-white space-y-3"
+          role="region"
+          aria-label={isEs ? 'Compensaciones de eficiencia de máquina' : 'Machine efficiency trade-offs comparison'}
+        >
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-2 gap-2">
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#78350F]" />
+                <span>{isEs ? 'Compensaciones de Eficiencia de Máquina' : 'Machine Efficiency Trade-offs'}</span>
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5 truncate max-w-[240px]">
+                {isEs ? 'Activa' : 'Active'}: {machineEfficiencyReport.activeMachineName}
+              </span>
+            </div>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-help ${
+                machineEfficiencyReport.hasComparison
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                  : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+              title={isEs ? machineEfficiencyReport.statusBadgeEs : machineEfficiencyReport.statusBadgeEn}
+            >
+              {isEs ? machineEfficiencyReport.statusBadgeEs : machineEfficiencyReport.statusBadgeEn}
             </span>
-            <span className="text-[10px] text-slate-500 font-mono">Guillotine vs Waterjet</span>
           </div>
-          <div className="h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={machineEfficiencyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="metric" tick={{ fontSize: 9, fill: '#64748B' }} />
-                <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px' }} />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar dataKey="Guillotine" fill="#64748B" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Waterjet" fill="#06B6D4" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+
+          {/* 3 Metric Comparison Panels */}
+          <div className="space-y-2.5 pt-0.5">
+            {machineEfficiencyReport.metrics.map((m) => (
+              <div key={m.key} className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg space-y-1.5">
+                {/* Metric Name & Delta Chip */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-800">
+                    {isEs ? m.nameEs : m.name}
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                      m.deltaStatus === 'improvement'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : m.deltaStatus === 'worse'
+                        ? 'bg-rose-50 text-rose-800 border-rose-300'
+                        : m.deltaStatus === 'neutral'
+                        ? 'bg-slate-100 text-slate-600 border-slate-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}
+                  >
+                    {isEs ? m.deltaDisplayEs : m.deltaDisplay}
+                  </span>
+                </div>
+
+                {/* Bars */}
+                <div className="space-y-1">
+                  {/* Active Machine Bar */}
+                  <div className="flex items-center space-x-2 text-[10px]">
+                    <span className="w-20 font-medium text-amber-950 truncate text-right">
+                      {machineEfficiencyReport.activeMachineName}
+                    </span>
+                    <div className="flex-1 bg-slate-200/70 rounded h-2.5 overflow-hidden flex items-center">
+                      <div
+                        className="bg-[#78350F] h-full rounded transition-all duration-300"
+                        style={{ width: `${Math.max(4, Math.min(100, m.activeRatio * 100))}%` }}
+                        title={`${machineEfficiencyReport.activeMachineName}: ${m.activeDisplay}`}
+                      />
+                    </div>
+                    <span className="w-24 font-mono text-amber-950 font-bold text-right text-[10px] truncate">
+                      {m.activeDisplay}
+                    </span>
+                  </div>
+
+                  {/* Alternative Machine Bar or Uncompared State */}
+                  {machineEfficiencyReport.hasComparison && m.otherRatio !== null ? (
+                    <div className="flex items-center space-x-2 text-[10px]">
+                      <span className="w-20 font-medium text-slate-500 truncate text-right">
+                        {machineEfficiencyReport.otherMachineName}
+                      </span>
+                      <div className="flex-1 bg-slate-200/70 rounded h-2.5 overflow-hidden flex items-center">
+                        <div
+                          className="bg-[#A8A29E] h-full rounded transition-all duration-300"
+                          style={{ width: `${Math.max(4, Math.min(100, m.otherRatio * 100))}%` }}
+                          title={`${machineEfficiencyReport.otherMachineName}: ${m.otherDisplay}`}
+                        />
+                      </div>
+                      <span className="w-24 font-mono text-slate-600 font-semibold text-right text-[10px] truncate">
+                        {m.otherDisplay}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2 text-[9.5px] text-slate-400 pl-22">
+                      <span className="italic">
+                        {isEs
+                          ? `Sin datos empíricos para ${machineEfficiencyReport.otherMachineName}`
+                          : `No empirical run data for ${machineEfficiencyReport.otherMachineName}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="text-[10px] text-slate-400 text-center">
-            Waterjet reduces kerf volume by 50% with stream kerf (0.0625" vs 0.125")
-          </p>
+
+          {/* Dynamic Summary Note */}
+          <div className="p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10.5px] text-slate-600 leading-snug">
+            {isEs ? machineEfficiencyReport.summaryTextEs : machineEfficiencyReport.summaryTextEn}
+          </div>
+
+          {/* Footnote / Legend */}
+          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1.5">
+            <div className="flex items-center space-x-3">
+              <span className="flex items-center space-x-1">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#78350F]" />
+                <span className="font-semibold text-slate-700">{isEs ? 'Máquina activa' : 'Active machine'}</span>
+              </span>
+              {machineEfficiencyReport.hasComparison && (
+                <span className="flex items-center space-x-1">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#A8A29E]" />
+                  <span className="text-slate-600">{isEs ? 'Comparación empírica' : 'Empirical comparison'}</span>
+                </span>
+              )}
+            </div>
+            <span className="italic text-slate-400">
+              {machineEfficiencyReport.hasComparison ? (isEs ? 'Resultados reales medidos' : 'Real measured runs') : (isEs ? 'Sin datos inventados' : 'Zero fabricated figures')}
+            </span>
+          </div>
         </div>
       </div>
+    </div>
 
       {/* Execution Tracking Table (Planned vs. Actual) */}
       <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">

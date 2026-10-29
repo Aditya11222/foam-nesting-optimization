@@ -51,6 +51,10 @@ describe('Cost Reconciliation and Baseline vs. Optimized Tests', () => {
     assert.strictEqual(report.baselineReconciled, true);
     assert.strictEqual(report.optimizedReconciled, true);
     assert.strictEqual(report.reconciliationError, undefined);
+
+    // Verify visible calculation lines
+    assert.ok(report.optimizedCalculationLine.includes('Foam $1,845 + Saw $16 − Credit $72 = Net $1,789'));
+    assert.ok(report.baselineCalculationLine.includes('Foam $2,768 + Saw $26 − Credit $0 = Net $2,794'));
   });
 
   test('Flags visible reconciliation error if arithmetic mismatch exceeds 1 cent', () => {
@@ -74,6 +78,43 @@ describe('Cost Reconciliation and Baseline vs. Optimized Tests', () => {
     assert.strictEqual(report.isFullyReconciled, false);
     assert.strictEqual(report.baselineReconciled, false);
     assert.ok(report.reconciliationError?.includes('Reconciliation delta detected'));
+    assert.ok(report.reconciliationError?.includes('Totals do not reconcile'));
+  });
+
+  test('Correctly classifies scrap as an of-which row and excludes it from the net summation', () => {
+    const report = computeCostReconciliation(
+      unitCost,
+      sawRatePerHour,
+      baselineGrossCuFt,
+      baselineScrapCuFt,
+      baselineBlocks,
+      baselineSawHours,
+      baselineTotalCost,
+      optScrapCuFt,
+      optMaterialCost,
+      optSawCost,
+      optRemnantCredit,
+      optNetJobCost,
+      optimizedBlocksCount
+    );
+
+    const scrapItem = report.categories.find((c) => c.key === 'scrap_cost');
+    assert.ok(scrapItem);
+    assert.strictEqual(scrapItem.isOfWhich, true);
+    assert.ok(scrapItem.category.includes('Scrap cost'));
+    assert.ok(scrapItem.category.includes('included in foam cost'));
+
+    // Summing only addends (Foam + Saw - Remnant Credit) equals Net Cost
+    const foamItem = report.categories.find((c) => c.key === 'foam_cost')!;
+    const sawItem = report.categories.find((c) => c.key === 'saw_cost')!;
+    const creditItem = report.categories.find((c) => c.key === 'remnant_credit')!;
+    const netItem = report.categories.find((c) => c.key === 'net_cost')!;
+
+    const optSum = foamItem.optimizedRounded + sawItem.optimizedRounded - creditItem.optimizedRounded;
+    assert.strictEqual(optSum, netItem.optimizedRounded);
+
+    const baseSum = foamItem.baselineRounded + sawItem.baselineRounded - creditItem.baselineRounded;
+    assert.strictEqual(baseSum, netItem.baselineRounded);
   });
 
   test('Never includes non-dollar categories like "Buns (qty)" in the chart categories', () => {
@@ -97,22 +138,24 @@ describe('Cost Reconciliation and Baseline vs. Optimized Tests', () => {
     assert.strictEqual(categoryNames.includes('Buns (qty)'), false);
     assert.strictEqual(categoryNames.includes('Buns'), false);
     assert.strictEqual(categoryNames.includes('Blocks (u)'), false);
-    // All items should be dollar cost categories
+
     assert.ok(categoryNames.includes('Foam Cost'));
-    assert.ok(categoryNames.includes('Scrap Cost'));
-    assert.ok(categoryNames.includes('Saw Time'));
+    assert.ok(categoryNames.some((c) => c.includes('Scrap cost')));
+    assert.ok(categoryNames.includes('Saw Time Cost'));
     assert.ok(categoryNames.includes('Remnant Credit'));
     assert.ok(categoryNames.includes('Net Cost'));
   });
 
-  test('Formats direct currency labels with comma thousands separators', () => {
+  test('Formats direct currency labels with comma thousands separators and proper negative minus', () => {
     assert.strictEqual(formatCurrencyShort(1845.2), '$1,845');
     assert.strictEqual(formatCurrencyShort(2793.5), '$2,794');
-    assert.strictEqual(formatCurrencyShort(-72.0), '-$72');
+    assert.strictEqual(formatCurrencyShort(-72.0), '−$72');
+    assert.strictEqual(formatCurrencyShort(-496), '−$496');
+    assert.strictEqual(formatCurrencyShort(-1000), '−$1,000');
     assert.strictEqual(formatCurrencyShort(0), '$0');
   });
 
-  test('Computes real net savings chip and data-driven bun count footnote', () => {
+  test('Computes real net savings chip, per-row delta chips, and data-driven bun count footnote', () => {
     const report = computeCostReconciliation(
       unitCost,
       sawRatePerHour,
@@ -136,6 +179,19 @@ describe('Cost Reconciliation and Baseline vs. Optimized Tests', () => {
       report.bunReductionText,
       'Optimized layout uses 2 buns vs 3 in the baseline'
     );
+
+    // Delta chips
+    const foam = report.categories.find((c) => c.key === 'foam_cost')!;
+    assert.ok(foam.deltaDisplay.includes('lower'));
+    assert.strictEqual(foam.deltaStatus, 'improvement');
+
+    const credit = report.categories.find((c) => c.key === 'remnant_credit')!;
+    assert.ok(credit.deltaDisplay.includes('credit'));
+    assert.strictEqual(credit.deltaStatus, 'improvement');
+
+    // Baseline credit shows $0 and note
+    assert.strictEqual(credit.baselineDisplay, '$0');
+    assert.strictEqual(credit.baselineNote, 'Baseline recovers no remnants');
   });
 
   test('Hides Remnant Credit category when both series have zero credit', () => {
@@ -156,7 +212,30 @@ describe('Cost Reconciliation and Baseline vs. Optimized Tests', () => {
     );
 
     assert.strictEqual(zeroCreditReport.hasRemnantCredit, false);
-    const categoryNames = zeroCreditReport.categories.map((c) => c.category);
-    assert.strictEqual(categoryNames.includes('Remnant Credit'), false);
+    const categoryKeys = zeroCreditReport.categories.map((c) => c.key);
+    assert.strictEqual(categoryKeys.includes('remnant_credit'), false);
+  });
+
+  test('Generates unplaced parts notice when total placed is less than demanded', () => {
+    const report = computeCostReconciliation(
+      unitCost,
+      sawRatePerHour,
+      baselineGrossCuFt,
+      baselineScrapCuFt,
+      baselineBlocks,
+      baselineSawHours,
+      baselineTotalCost,
+      optScrapCuFt,
+      optMaterialCost,
+      optSawCost,
+      optRemnantCredit,
+      optNetJobCost,
+      optimizedBlocksCount,
+      24, // placed
+      28  // demanded
+    );
+
+    assert.ok(report.unplacedNote);
+    assert.ok(report.unplacedNote.includes('24 of 28 parts placed'));
   });
 });

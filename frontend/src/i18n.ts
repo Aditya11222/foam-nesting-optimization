@@ -109,12 +109,6 @@ const resources = {
       clear_demo_data: "Clear demo data",
       clear_demo_confirm: "Are you sure you want to clear all locally saved jobs and demo data? This cannot be undone.",
       
-      // Cost Component Breakdown Chart
-      cost_component_breakdown: "Cost Component Breakdown",
-      raw_foam_cost: "Raw Foam",
-      saw_operation_cost: "Saw Operation",
-      remnant_credit_deduction: "Remnant Credit (-)",
-      net_job_cost: "Net Total Cost",
 
       // Dashboard Page
       hero_kpi_yield: "Net Usable Yield",
@@ -263,7 +257,31 @@ const resources = {
       chart_savings_chip: "Net saving {{amount}} ({{percent}}%)",
       chart_no_remnant_credit_note: "No remnant credit",
       chart_cost_reconciliation_warning: "Reconciliation Warning: Foam + Saw - Remnant Credit does not equal Net Cost within $0.01",
-      chart_baseline_simulated_disclaimer: "Estimated, demo assumptions. Baseline is simulated."
+      chart_baseline_simulated_disclaimer: "Estimated, demo assumptions. Baseline is simulated.",
+      chart_scrap_of_which: "Scrap cost (included in foam cost)",
+      chart_saw_time_cost: "Saw Time Cost",
+      chart_show_calculation: "Show calculation",
+      chart_hide_calculation: "Hide calculation",
+      chart_baseline_no_remnants: "Baseline recovers no remnants",
+      chart_delta_lower: "lower",
+      chart_delta_higher: "higher",
+      chart_delta_no_difference: "No difference",
+      chart_volume_breakdown_title: "Volume Breakdown (ft³)",
+      chart_volume_reconciled: "100% Reconciled",
+      chart_volume_not_reconciled: "Totals do not reconcile",
+      chart_volume_composition_title: "Gross Bun Composition",
+      chart_volume_partitioned: "100% partitioned",
+      chart_volume_category: "Category",
+      chart_volume_ft3: "Volume (ft³)",
+      chart_volume_pct_gross: "% of Gross",
+      chart_volume_meaning: "Industry Meaning",
+      chart_volume_total_gross: "Total Gross Bun",
+      chart_volume_equation: "Equation:",
+      chart_volume_per_block: "Per-Block Volume Distribution",
+      chart_volume_show_all_blocks: "Show all {{count}} blocks",
+      chart_volume_show_fewer_blocks: "Show fewer blocks",
+      chart_volume_key_takeaways: "Key Takeaways",
+      chart_volume_parts_label: "parts"
     }
   },
   es: {
@@ -373,12 +391,6 @@ const resources = {
       clear_demo_data: "Borrar datos de demostración [revisión]",
       clear_demo_confirm: "¿Está seguro de que desea borrar todos los trabajos guardados y datos locales? Esta acción no se puede deshacer. [revisión]",
 
-      // Cost Component Breakdown Chart
-      cost_component_breakdown: "Desglose de Componentes de Costo [revisión]",
-      raw_foam_cost: "Materia Prima (Espuma) [revisión]",
-      saw_operation_cost: "Operación de Sierra [revisión]",
-      remnant_credit_deduction: "Crédito por Remanente (-) [revisión]",
-      net_job_cost: "Costo Total Neto [revisión]",
 
       // Dashboard Page
       hero_kpi_yield: "Rendimiento Neto Útil [revisión]",
@@ -529,7 +541,31 @@ const resources = {
       chart_savings_chip: "Ahorro neto {{amount}} ({{percent}}%) [revisión]",
       chart_no_remnant_credit_note: "Sin crédito por remanentes [revisión]",
       chart_cost_reconciliation_warning: "Aviso de Conciliación: Espuma + Sierra - Crédito no coincide con el Coste Neto dentro de $0.01 [revisión]",
-      chart_baseline_simulated_disclaimer: "Estimado, supuestos de demostración. La línea base es simulada. [revisión]"
+      chart_baseline_simulated_disclaimer: "Estimado, supuestos de demostración. La línea base es simulada. [revisión]",
+      chart_scrap_of_which: "Costo desperdicio (incluido en costo de espuma) [revisión]",
+      chart_saw_time_cost: "Costo Tiempo de Sierra [revisión]",
+      chart_show_calculation: "Mostrar desglose [revisión]",
+      chart_hide_calculation: "Ocultar desglose [revisión]",
+      chart_baseline_no_remnants: "La línea base no recupera remanentes [revisión]",
+      chart_delta_lower: "menor [revisión]",
+      chart_delta_higher: "mayor [revisión]",
+      chart_delta_no_difference: "Sin diferencia [revisión]",
+      chart_volume_breakdown_title: "Desglose de Volumen (ft³)",
+      chart_volume_reconciled: "100% Conciliado",
+      chart_volume_not_reconciled: "Totales no concilian [revisión]",
+      chart_volume_composition_title: "Composición del Bloque Bruto [revisión]",
+      chart_volume_partitioned: "particionado 100% [revisión]",
+      chart_volume_category: "Categoría [revisión]",
+      chart_volume_ft3: "Volumen (ft³) [revisión]",
+      chart_volume_pct_gross: "% del Bruto [revisión]",
+      chart_volume_meaning: "Significado Industrial [revisión]",
+      chart_volume_total_gross: "Bloque Bruto Total [revisión]",
+      chart_volume_equation: "Ecuación: [revisión]",
+      chart_volume_per_block: "Distribución de Volumen por Bloque [revisión]",
+      chart_volume_show_all_blocks: "Mostrar los {{count}} bloques [revisión]",
+      chart_volume_show_fewer_blocks: "Mostrar menos bloques [revisión]",
+      chart_volume_key_takeaways: "Conclusiones Clave [revisión]",
+      chart_volume_parts_label: "piezas [revisión]"
     }
   }
 };
